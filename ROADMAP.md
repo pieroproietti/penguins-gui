@@ -65,36 +65,28 @@ Goal: use Eggs data to present a trustworthy remaster workflow.
 **Complete when:** standard, clone and crypted modes use structured data on a
 supporting Eggs version and degrade clearly on older versions.
 
-## M4 — Tailor preparation
+## Note on Penguins Tailor
 
-Goal: let the user inspect and apply a costume before remastering without
-embedding Tailor logic in the GUI.
+Tailor integration is explicitly out of scope for `penguins-gui`. Tailor is
+designed to dress and configure naked systems from the console (CLI/TUI) before
+any display server or graphical interface is installed. A desktop GUI cannot run
+in that environment, and once a desktop is present, the tailoring step has
+already passed.
 
-- discover Tailor and its capabilities independently from Eggs;
-- obtain atelier status and costume catalogue as JSON;
-- show costume details and compatibility;
-- request and display a dry-run plan;
-- execute `wear` with NDJSON progress;
-- show an applied/skipped/failed summary;
-- offer remastering as a separate next action after successful preparation.
+## M4 — Workflow composition and artifact management
 
-**Complete when:** a user can select a compatible costume, review its plan,
-apply it and then move to remastering, while both tools remain separate.
-
-## M5 — Workflow composition
-
-Goal: coordinate tools without turning them into one coupled application.
+Goal: coordinate tools and artifacts without turning them into one coupled application.
 
 - persist only GUI preferences and resumable workflow metadata;
-- represent preparation and remastering as separate operations and results;
+- represent remastering and future installation as separate operations and results;
 - detect changes that invalidate an earlier check or plan;
-- display artifacts and reports from multiple operations together;
-- never assume that Tailor, Eggs and Krill share installation or versions.
+- display artifacts, ISOs, checksums and reports together;
+- never assume that Eggs and Krill share installation or versions.
 
-**Complete when:** workflows can combine independently versioned tools entirely
-through their public contracts.
+**Complete when:** workflows can combine independently versioned tools and manage
+resulting artifacts entirely through their public contracts.
 
-## M6 — Independent Krill integration
+## M5 — Independent Krill integration
 
 Goal: integrate installation only after Krill has a stable independent CLI.
 
@@ -109,7 +101,7 @@ Goal: integrate installation only after Krill has a stable independent CLI.
 **Complete when:** the GUI can install from a validated plan without importing
 Krill internals or weakening its own safeguards.
 
-## M7 — Optional adviser
+## M6 — Optional adviser
 
 Goal: add assistance without changing the default GUI-first experience.
 
@@ -132,7 +124,7 @@ These concerns apply to every milestone:
 - Italian and English localization without using translated messages as logic;
 - protocol compatibility tests;
 - clear release notes and supported-version information;
-- strict separation between GUI, Eggs, Tailor and Krill.
+- strict separation between GUI, Eggs and Krill.
 
 ## Immediate next steps
 

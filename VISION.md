@@ -19,27 +19,25 @@ and launching the appropriate installer.
 
 ### Independent tools
 
-Penguins GUI, Penguins' Eggs, Penguins Tailor, and Krill must remain independent
-programs.
+Penguins GUI, Penguins' Eggs, and Krill must remain independent programs.
+(Penguins Tailor remains a dedicated CLI/TUI tool).
 
 Each tool owns one clear responsibility:
 
-- **Penguins Tailor** prepares and customizes the running system.
+- **Penguins Tailor** prepares and customizes a naked/headless system from the console (CLI/TUI). Because it runs before any desktop or display server is installed, it is intentionally excluded from Penguins GUI.
 - **Penguins' Eggs** remasters the running system into a live, bootable image.
 - **Krill** installs a live system onto storage.
-- **Penguins GUI** discovers, presents, and coordinates the available tools.
+- **Penguins GUI** discovers, presents, and coordinates the desktop-ready tools (primarily Eggs and later Krill).
 
 The dependency direction is always from the GUI toward the tools:
 
 ```text
 penguins-gui ---> eggs ---> coa ---> oa
              \
-              +--> tailor ---> wardrobe
-             \
               +--> krill
 ```
 
-Eggs, Tailor, and Krill must never require Penguins GUI. Removing the GUI must
+Eggs and Krill must never require Penguins GUI. Removing the GUI must
 not affect their command-line operation.
 
 ### Public interfaces, not internal coupling
@@ -117,21 +115,13 @@ The remaster view will remain the central feature. It may progressively add:
 - recovery actions after an interrupted or failed remaster;
 - clear separation between observed facts, warnings, and suggested actions.
 
-### Tailor integration
+### Tailor (out of scope)
 
-Penguins GUI may discover an independently installed Penguins Tailor and offer
-a graphical path through its public capabilities:
-
-- select an atelier;
-- browse costumes and accessories;
-- inspect packages, repositories, overlays, and commands before applying them;
-- run a dry-run when Tailor provides one;
-- apply a selected costume and follow its output;
-- stop the workflow if Tailor fails, allowing the user to inspect the system
-  before starting a remaster.
-
-Tailor remains fully usable without Penguins GUI, and its wardrobe format stays
-owned by Tailor.
+Penguins Tailor is intentionally not integrated into Penguins GUI. Tailor is
+designed to dress and configure naked Linux systems (often lacking Xorg/Wayland
+and any desktop environment). Since a graphical interface cannot run on a naked
+system, Tailor belongs naturally and exclusively to the terminal (CLI/TUI). Once
+a desktop is installed and running, the tailoring phase is already complete.
 
 ### Installation tools
 
@@ -188,7 +178,7 @@ deterministic validation
 user approval
     |
     v
-Tailor / Eggs / Krill
+Eggs / Krill
 ```
 
 The AI must not receive an unrestricted root shell or independently perform
@@ -214,13 +204,14 @@ removal have been verified on the corresponding distribution families.
 
 Build-time Fyne dependencies must be distinguished from runtime dependencies.
 Penguins' Eggs may be a package dependency or an explicitly declared required
-companion, while Tailor, Krill, and AI support remain optional integrations.
+companion, while Krill and AI support remain optional integrations.
 
 ## Non-goals
 
 Penguins GUI is not intended to:
 
-- replace the command-line interfaces of Eggs, Tailor, or Krill;
+- replace the command-line interfaces of Eggs or Krill;
+- support Penguins Tailor, which is designed exclusively for naked console environments;
 - merge the Penguins projects into a single monolithic application;
 - maintain a second implementation of remastering, customization, encryption,
   partitioning, or installation logic;
@@ -254,12 +245,11 @@ Penguins GUI is not intended to:
 - Better artifact and failure handling.
 - Secure integration of interactive modes.
 
-### Milestone 4: optional Tailor workflow
+### Milestone 4: installer integration (Krill)
 
-- Detection of Tailor and compatible capabilities.
-- Graphical browsing of ateliers and costumes.
-- Review, dry-run, execution, and logs.
-- Explicit checkpoint between customization and remastering.
+- Discovery of Krill and supported installation modes.
+- Storage and partition plan inspection.
+- Supervised execution and progress reporting.
 
 ### Milestone 5: advisory AI
 

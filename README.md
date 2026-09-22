@@ -22,8 +22,13 @@ internals and does not modify Penguins' Eggs.
 - Find the newest ISO created beneath the selected working directory.
 - Open the ISO directory with `xdg-open`.
 
-Tailor, Krill, AI assistance, configuration editing and artifact management are
+Krill, AI assistance, configuration editing and artifact management are
 intentionally outside this first prototype.
+
+Integration with Penguins Tailor is explicitly excluded: Tailor operates on
+naked (headless/CLI) systems to prepare and customize them before a desktop
+environment exists, making a graphical interface both impossible and unnecessary
+for that stage.
 
 ## Requirements
 

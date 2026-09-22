@@ -9,10 +9,12 @@ not import their packages or reproduce their domain logic.
 The application must remain useful when only some tools are installed:
 
 - Eggs remasters the running system;
-- Tailor prepares and customizes it;
 - Krill installs a live system;
 - the GUI collects choices, requests authorization, starts operations and
   presents their progress and results.
+
+(Note: Penguins Tailor is explicitly excluded from the GUI because it is designed
+to run on naked systems before any graphical environment is installed.)
 
 The machine-readable contract is defined in [PROTOCOL.md](PROTOCOL.md). This
 document describes how the GUI should be organized around that contract.
@@ -41,10 +43,8 @@ flowchart TD
     UI["Fyne views"] --> APP["Application workflows"]
     APP --> PORT["Tool interface"]
     PORT --> EGGS["Eggs adapter"]
-    PORT --> TAILOR["Tailor adapter"]
     PORT --> KRILL["Krill adapter"]
     EGGS --> CLI["External processes"]
-    TAILOR --> CLI
     KRILL --> CLI
 ```
 
@@ -86,8 +86,8 @@ type Tool interface {
 }
 ```
 
-This is an architectural example, not a required public API. Eggs, Tailor and
-Krill may have typed extensions for their own requests and inspection data.
+This is an architectural example, not a required public API. Eggs and Krill
+may have typed extensions for their own requests and inspection data.
 
 ### Tool adapters
 
@@ -114,7 +114,6 @@ internal/app/            workflows and application state
 internal/domain/         requests, events, plans, results
 internal/tools/          common process and protocol support
 internal/tools/eggs/     Eggs adapter and legacy fallback
-internal/tools/tailor/   Tailor adapter
 internal/tools/krill/    future Krill adapter
 internal/ui/             Fyne views and presentation models
 protocol/                JSON Schemas and examples
@@ -215,7 +214,6 @@ Controls are derived from the installed tool's capability document. Examples:
 
 - hide or disable a remaster mode not reported by Eggs;
 - show compression algorithms and level ranges reported by Eggs;
-- enable Tailor dry-run only when supported;
 - require confirmation when an operation is marked destructive;
 - explain why a tool or operation is unavailable.
 
@@ -227,8 +225,7 @@ Errors belong to three categories:
 
 1. **GUI errors**: invalid local state, process start failure, protocol decoding
    failure;
-2. **tool errors**: structured terminal errors returned by Eggs, Tailor or
-   Krill;
+2. **tool errors**: structured terminal errors returned by Eggs or Krill;
 3. **authorization errors**: elevation denied, unavailable or expired.
 
 The main view shows a concise explanation and a possible remedy. Technical
@@ -245,7 +242,7 @@ Most GUI development should not require root or a real remaster:
 - keep a small number of manual end-to-end tests on supported systems;
 - use Eggs' own end-to-end infrastructure to validate actual ISO production.
 
-The GUI tests the contract and presentation. Eggs, Tailor and Krill remain
+The GUI tests the contract and presentation. Eggs and Krill remain
 responsible for testing their domain operations.
 
 ## Architectural invariants

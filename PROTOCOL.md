@@ -3,7 +3,7 @@
 ## Status
 
 This document defines the proposed contract between `penguins-gui` and the
-independent command-line programs Penguins' Eggs, Penguins Tailor and Krill.
+independent command-line programs Penguins' Eggs and Krill.
 
 The JSON interface described here is a design proposal. Unless explicitly
 marked as current behaviour, command names and options in this document are
@@ -14,11 +14,15 @@ not implemented yet.
 The GUI must orchestrate the tools through stable public interfaces without
 importing their internal code:
 
-- Tailor prepares or customizes a system;
 - Eggs remasters the running system into an ISO;
 - Krill installs a live system;
 - the GUI validates user choices, starts the selected tool and renders its
   progress and result.
+
+Note: Penguins Tailor is explicitly excluded from the GUI integration protocol.
+Tailor is designed to operate on naked (headless/CLI-only) systems to configure
+and install desktop environments before any GUI is available; hence, it remains
+exclusively a CLI/TUI tool.
 
 Each tool remains useful, installable and releasable without the GUI. The GUI
 must also remain usable when only some of the tools are installed.
@@ -125,27 +129,6 @@ A request has a common envelope and operation-specific `options`:
 event. Unknown options must cause validation to fail rather than being silently
 ignored.
 
-### Tailor request
-
-This preserves the configuration we initially drafted while making its status
-explicit: package additions and removals are future options until Tailor
-exposes them as a public operation.
-
-```json
-{
-  "protocol": "penguins/v1",
-  "request_id": "018f90c4-9ad9-7730-90a7-58f7ea6c30c5",
-  "tool": "tailor",
-  "operation": "wear",
-  "options": {
-    "costume": "colibri",
-    "add": ["podman"],
-    "remove": ["libreoffice"],
-    "dry_run": false
-  }
-}
-```
-
 ### Eggs request
 
 ```json
@@ -228,11 +211,7 @@ All events share a common envelope:
 This supersedes the smaller event sketches used during the initial design:
 
 ```json
-{"tool":"tailor","operation":"wear","item":"colibri","state":"running","step":3,"steps":8,"message":"Installing packages"}
-```
-
-```json
-{"step":"mksquashfs","state":"running","progress":63}
+{"tool":"eggs","operation":"remaster","step":"mksquashfs","state":"running","progress":63,"message":"Creating compressed filesystem"}
 ```
 
 The compact forms explain the idea, while the versioned envelope gives the GUI
@@ -366,23 +345,6 @@ The smallest useful first implementation is JSON events for `eggs remaster`
 and a final artifact result. That immediately removes log parsing and ISO
 directory scanning from the GUI.
 
-### Tailor
-
-Tailor should expose:
-
-1. capabilities and version;
-2. atelier list and synchronization status;
-3. costume list and costume details, including compatibility and declared
-   packages/accessories;
-4. a dry-run plan describing proposed system changes;
-5. NDJSON events for `wear` and other long-running operations;
-6. a final report of applied, skipped and failed changes;
-7. structured errors and cancellation handling.
-
-The GUI should display information returned by Tailor and pass back stable
-atelier/costume identifiers. It must not read Tailor's private directories or
-interpret its internal YAML files directly.
-
 ### Krill
 
 Once independent, Krill should expose:
@@ -453,11 +415,9 @@ whether an operation is cancellable and identify any non-interruptible steps.
 2. Add machine-readable remaster checks and the final ISO artifact result.
 3. Update `penguins-gui` to prefer the protocol and retain the current CLI
    adapter for older Eggs versions.
-4. Add capabilities, catalogue/detail JSON and dry-run plans to Tailor.
-5. Add Tailor execution events and integrate its preparation workflow.
-6. Reuse the same envelope when Krill becomes an independent application.
-7. Publish JSON Schemas and protocol fixtures so all projects can test the
+4. Reuse the same envelope when Krill becomes an independent application.
+5. Publish JSON Schemas and protocol fixtures so all projects can test the
    contract without invoking privileged operations.
 
 This order delivers immediate value to the working remaster GUI while keeping
-Eggs, Tailor, Krill and `penguins-gui` small and independently maintainable.
+Eggs, Krill and `penguins-gui` small and independently maintainable.
