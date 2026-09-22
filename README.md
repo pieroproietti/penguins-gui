@@ -2,6 +2,8 @@
 
 Minimal, independent desktop GUI for Penguins' Eggs.
 
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
 The prototype deliberately does one thing: it starts an Eggs remaster, displays
 the live output and locates the ISO created at the end. It does not import Eggs
 internals and does not modify Penguins' Eggs.
