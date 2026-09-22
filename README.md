@@ -2,6 +2,8 @@
 
 Minimal, independent desktop GUI for Penguins' Eggs.
 
+![penguins-gui](./penguins-gui.png)
+
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 The prototype deliberately does one thing: it starts an Eggs remaster, displays
