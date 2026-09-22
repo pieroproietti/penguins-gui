@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -16,7 +17,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
@@ -40,6 +40,8 @@ type isoArtifact struct {
 	Size    int64
 	ModTime time.Time
 }
+
+var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
 
 func main() {
 	a := app.NewWithID(applicationID)
@@ -86,13 +88,9 @@ func main() {
 		d.Show()
 	})
 
-	logData := binding.NewString()
-	_ = logData.Set("In attesa.\n")
-	logEntry := widget.NewEntryWithData(logData)
-	logEntry.MultiLine = true
-	logEntry.Wrapping = fyne.TextWrapOff
-	logEntry.Disable()
-	logScroll := container.NewScroll(logEntry)
+	logGrid := widget.NewTextGrid()
+	logGrid.SetText("In attesa.\n")
+	logScroll := container.NewScroll(logGrid)
 	logScroll.SetMinSize(fyne.NewSize(760, 260))
 
 	result := widget.NewLabel("")
@@ -110,11 +108,13 @@ func main() {
 	logText := ""
 	appendLog := func(text string) {
 		logMu.Lock()
-		logText += text
+		logText += stripANSI(text)
 		current := logText
 		logMu.Unlock()
-		_ = logData.Set(current)
-		logScroll.ScrollToBottom()
+		fyne.Do(func() {
+			logGrid.SetText(current)
+			logScroll.ScrollToBottom()
+		})
 	}
 
 	start.OnTapped = func() {
@@ -136,7 +136,7 @@ func main() {
 		logMu.Lock()
 		logText = ""
 		logMu.Unlock()
-		_ = logData.Set("")
+		logGrid.SetText("")
 
 		startedAt := time.Now()
 		go func() {
@@ -199,6 +199,10 @@ func main() {
 	footer := container.NewVBox(widget.NewSeparator(), result, container.NewHBox(layout.NewSpacer(), openFolder))
 	w.SetContent(container.NewBorder(container.NewVBox(header, form), footer, nil, nil, logScroll))
 	w.ShowAndRun()
+}
+
+func stripANSI(text string) string {
+	return ansiEscapePattern.ReplaceAllString(text, "")
 }
 
 func detectEggs() (path, version string, err error) {

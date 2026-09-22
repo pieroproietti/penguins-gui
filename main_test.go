@@ -62,3 +62,11 @@ func TestHumanSize(t *testing.T) {
 		t.Fatalf("humanSize() = %q", got)
 	}
 }
+
+func TestStripANSI(t *testing.T) {
+	input := "\x1b[36m[parser]\x1b[0m Profile loaded successfully."
+	want := "[parser] Profile loaded successfully."
+	if got := stripANSI(input); got != want {
+		t.Fatalf("stripANSI() = %q, want %q", got, want)
+	}
+}
