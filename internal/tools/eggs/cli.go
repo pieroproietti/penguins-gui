@@ -23,9 +23,9 @@ type RemasterMode string
 
 // Remaster modes retain the labels used by the current GUI.
 const (
-	ModeStandard  RemasterMode = "Live standard"
-	ModeClone     RemasterMode = "Clone del sistema"
-	ModeEncrypted RemasterMode = "Clone cifrato"
+	ModeStandard  RemasterMode = "Standard live"
+	ModeClone     RemasterMode = "System clone"
+	ModeEncrypted RemasterMode = "Encrypted clone"
 )
 
 // ISOArtifact describes an ISO found in the working directory.
@@ -44,10 +44,10 @@ func (CLIAdapter) Detect() (path, version string, err error) {
 	out, versionErr := exec.Command(path, "version").CombinedOutput()
 	version = strings.TrimSpace(string(out))
 	if version == "" {
-		version = "Penguins’ Eggs rilevato: " + path
+		version = "Penguins’ Eggs found: " + path
 	}
 	if versionErr != nil {
-		version += " (versione non determinata)"
+		version += " (version undetermined)"
 	}
 	return path, version, nil
 }
@@ -107,7 +107,7 @@ func privilegedCommand(eggsPath string, args []string) (string, []string, error)
 	}
 	pkexecPath, err := exec.LookPath("pkexec")
 	if err != nil {
-		return "", nil, errors.New("pkexec non trovato: installa polkit oppure avvia temporaneamente la GUI come root")
+		return "", nil, errors.New("pkexec not found: install polkit or run GUI as root")
 	}
 	return pkexecPath, append([]string{eggsPath}, args...), nil
 }
@@ -140,7 +140,7 @@ func (CLIAdapter) RunInteractiveTerminal(eggsPath string, args []string) error {
 		terminalArgs = append(terminalArgs, commandArgs...)
 		return exec.Command(terminalPath, terminalArgs...).Run()
 	}
-	return errors.New("nessun terminale grafico supportato trovato per il wizard cifrato")
+	return errors.New("no supported graphical terminal found for encrypted wizard")
 }
 
 // NewestISO finds the latest ISO directly in root, without scanning subdirectories,
@@ -165,7 +165,7 @@ func (CLIAdapter) NewestISO(root string, notBefore time.Time) (ISOArtifact, erro
 		found = append(found, ISOArtifact{Path: filepath.Join(root, entry.Name()), Size: info.Size(), ModTime: info.ModTime()})
 	}
 	if len(found) == 0 {
-		return ISOArtifact{}, errors.New("nessuna nuova ISO trovata")
+		return ISOArtifact{}, errors.New("no new ISO found")
 	}
 	sort.Slice(found, func(i, j int) bool { return found[i].ModTime.After(found[j].ModTime) })
 	return found[0], nil

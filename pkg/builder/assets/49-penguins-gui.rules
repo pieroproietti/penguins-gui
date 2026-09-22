@@ -1,0 +1,14 @@
+/* /usr/share/polkit-1/rules.d/49-penguins-gui.rules
+ * Polkit rules for Penguins GUI / Penguins' Eggs:
+ * - Allow standard remaster and maintenance tools without password in active session.
+ * - Require administrative authentication when cloning personal data (--clone or --crypted).
+ */
+polkit.addRule(function(action, subject) {
+    if (action.id === "net.penguins-eggs.pkexec.run" ||
+        (action.id === "org.freedesktop.policykit.exec" && action.lookup("program") === "/usr/bin/eggs")) {
+        var cmd = action.lookup("command_line");
+        if (cmd && (cmd.indexOf("--clone") !== -1 || cmd.indexOf("--crypted") !== -1)) {
+            return polkit.Result.AUTH_ADMIN;
+        }
+    }
+});
