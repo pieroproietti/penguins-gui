@@ -1,0 +1,14 @@
+{
+  "protocol": "penguins/v1",
+  "request_id": "018f90c4-a050-7201-96ae-60d119517f78",
+  "tool": "eggs",
+  "operation": "remaster",
+  "options": {
+    "mode": "standard",
+    "working_directory": "/home/eggs",
+    "compression": {
+      "algorithm": "zstd",
+      "level": 3
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://penguins-eggs.net/schemas/penguins/v1/result.schema.json",
+  "title": "Penguins successful result",
+  "type": "object",
+  "required": [
+    "protocol", "type", "request_id", "run_id", "sequence", "timestamp",
+    "tool", "tool_version", "operation", "state", "message", "artifacts"
+  ],
+  "properties": {
+    "protocol": {"const": "penguins/v1"},
+    "type": {"const": "result"},
+    "request_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "sequence": {"type": "integer", "minimum": 0},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "tool": {"enum": ["eggs", "tailor", "krill"]},
+    "tool_version": {"type": "string", "minLength": 1},
+    "operation": {"type": "string", "minLength": 1},
+    "state": {"const": "succeeded"},
+    "message": {"type": "string"},
+    "artifacts": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "data": {"type": "object"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "pattern": "^/"},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string", "pattern": "^[A-Fa-f0-9]{64}$"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

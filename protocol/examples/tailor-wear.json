@@ -1,0 +1,11 @@
+{
+  "protocol": "penguins/v1",
+  "request_id": "018f90c4-9ad9-7730-90a7-58f7ea6c30c5",
+  "tool": "tailor",
+  "operation": "wear",
+  "options": {
+    "costume": "colibri",
+    "branch": "main",
+    "dry_run": true
+  }
+}
