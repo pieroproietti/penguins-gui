@@ -19,7 +19,8 @@ document describes how the GUI should be organized around that contract.
 
 ## Current prototype
 
-The prototype is intentionally contained in `main.go`. It currently:
+The Fyne view remains in `main.go`, while `internal/tools/eggs.CLIAdapter`
+owns the existing textual CLI integration. The adapter currently:
 
 1. locates `eggs` in `PATH` and runs `eggs version`;
 2. maps the selected mode to the existing `eggs remaster` flags;
@@ -28,9 +29,10 @@ The prototype is intentionally contained in `main.go`. It currently:
 5. opens encrypted mode in a terminal because Eggs requests interactive input;
 6. scans the working directory for the newest ISO after a successful exit.
 
-This proves the complete user journey, but command construction, process
-execution, output interpretation and UI state should be separated before more
-workflows are added.
+This preserves the prototype's complete user journey. Command construction,
+process execution and ISO discovery are isolated from Fyne; workflow coordination
+and UI state remain in `main.go` for a later extraction. The name `CLIAdapter`
+distinguishes this integration from the older Node.js Eggs version.
 
 ## Target layers
 
@@ -256,4 +258,3 @@ responsible for testing their domain operations.
 6. Privileges are requested per operation, not for the entire GUI.
 7. AI assistance may prepare and explain requests but never bypass validation,
    authorization or explicit confirmation.
-

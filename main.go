@@ -1,18 +1,16 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pieroproietti/penguins-gui/internal/tools/eggs"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -27,20 +25,6 @@ const (
 	defaultNest   = "/home/eggs"
 )
 
-type remasterMode string
-
-const (
-	modeStandard  remasterMode = "Live standard"
-	modeClone     remasterMode = "Clone del sistema"
-	modeEncrypted remasterMode = "Clone cifrato"
-)
-
-type isoArtifact struct {
-	Path    string
-	Size    int64
-	ModTime time.Time
-}
-
 var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
 
 func main() {
@@ -48,22 +32,23 @@ func main() {
 	w := a.NewWindow("Penguins’ Eggs")
 	w.Resize(fyne.NewSize(820, 650))
 
-	eggsPath, eggsVersion, detectErr := detectEggs()
+	eggsCLI := eggs.CLIAdapter{}
+	eggsPath, eggsVersion, detectErr := eggsCLI.Detect()
 	status := widget.NewLabel(eggsVersion)
 	status.Wrapping = fyne.TextWrapWord
 
 	mode := widget.NewRadioGroup([]string{
-		string(modeStandard),
-		string(modeClone),
-		string(modeEncrypted),
+		string(eggs.ModeStandard),
+		string(eggs.ModeClone),
+		string(eggs.ModeEncrypted),
 	}, nil)
 	mode.Required = true
-	mode.SetSelected(string(modeStandard))
+	mode.SetSelected(string(eggs.ModeStandard))
 
-	modeHelp := widget.NewLabel(modeDescription(modeStandard))
+	modeHelp := widget.NewLabel(modeDescription(eggs.ModeStandard))
 	modeHelp.Wrapping = fyne.TextWrapWord
 	mode.OnChanged = func(selected string) {
-		modeHelp.SetText(modeDescription(remasterMode(selected)))
+		modeHelp.SetText(modeDescription(eggs.RemasterMode(selected)))
 	}
 
 	pathEntry := widget.NewEntry()
@@ -78,8 +63,8 @@ func main() {
 	browse := widget.NewButton("Scegli…", func() {
 		d := dialog.NewFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil {
-			dialog.ShowError(err, w)
-			return
+				dialog.ShowError(err, w)
+				return
 			}
 			if uri != nil {
 				pathEntry.SetText(uri.Path())
@@ -124,8 +109,8 @@ func main() {
 		}
 
 		nest := filepath.Clean(pathEntry.Text)
-		selectedMode := remasterMode(mode.Selected)
-		args := remasterArgs(selectedMode, nest)
+		selectedMode := eggs.RemasterMode(mode.Selected)
+		args := eggsCLI.RemasterArgs(selectedMode, nest)
 
 		start.Disable()
 		browse.Disable()
@@ -141,12 +126,12 @@ func main() {
 		startedAt := time.Now()
 		go func() {
 			var err error
-			if selectedMode == modeEncrypted {
+			if selectedMode == eggs.ModeEncrypted {
 				appendLog("La modalità cifrata usa il wizard interattivo di Eggs.\n")
 				appendLog("Passphrase e parametri crittografici verranno richiesti in un terminale separato.\n\n")
-				err = runInteractiveTerminal(eggsPath, args)
+				err = eggsCLI.RunInteractiveTerminal(eggsPath, args)
 			} else {
-				err = runPrivileged(eggsPath, args, appendLog)
+				err = eggsCLI.RunPrivileged(eggsPath, args, appendLog)
 			}
 			if err != nil {
 				fyne.Do(func() {
@@ -154,7 +139,7 @@ func main() {
 					dialog.ShowError(err, w)
 				})
 			} else {
-				artifact, findErr := newestISO(nest, startedAt)
+				artifact, findErr := eggsCLI.NewestISO(nest, startedAt)
 				fyne.Do(func() {
 					if findErr != nil {
 						result.SetText("Remaster completato, ma non ho trovato una nuova ISO nella cartella selezionata.")
@@ -205,148 +190,15 @@ func stripANSI(text string) string {
 	return ansiEscapePattern.ReplaceAllString(text, "")
 }
 
-func detectEggs() (path, version string, err error) {
-	path, err = exec.LookPath("eggs")
-	if err != nil {
-		return "", "", err
-	}
-	out, versionErr := exec.Command(path, "version").CombinedOutput()
-	version = strings.TrimSpace(string(out))
-	if version == "" {
-		version = "Penguins’ Eggs rilevato: " + path
-	}
-	if versionErr != nil {
-		version += " (versione non determinata)"
-	}
-	return path, version, nil
-}
-
-func modeDescription(mode remasterMode) string {
+func modeDescription(mode eggs.RemasterMode) string {
 	switch mode {
-	case modeClone:
+	case eggs.ModeClone:
 		return "Include utenti, configurazioni e dati nel clone non cifrato."
-	case modeEncrypted:
+	case eggs.ModeEncrypted:
 		return "Crea il clone cifrato previsto da Penguins’ Eggs; la passphrase viene richiesta da Eggs."
 	default:
 		return "Crea una live ripulita, senza includere utenti e dati personali."
 	}
-}
-
-func remasterArgs(mode remasterMode, nest string) []string {
-	args := []string{"remaster"}
-	switch mode {
-	case modeClone:
-		args = append(args, "--clone")
-	case modeEncrypted:
-		args = append(args, "--crypted")
-	}
-	return append(args, "--path", nest)
-}
-
-func runPrivileged(eggsPath string, args []string, appendLog func(string)) error {
-	command, commandArgs, err := privilegedCommand(eggsPath, args)
-	if err != nil {
-		return err
-	}
-
-	appendLog("$ " + strings.Join(append([]string{command}, commandArgs...), " ") + "\n\n")
-	cmd := exec.Command(command, commandArgs...)
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	var readers sync.WaitGroup
-	readers.Add(2)
-	stream := func(scanner *bufio.Scanner) {
-		defer readers.Done()
-		for scanner.Scan() {
-			appendLog(scanner.Text() + "\n")
-		}
-	}
-	go stream(bufio.NewScanner(stdout))
-	go stream(bufio.NewScanner(stderr))
-
-	waitErr := cmd.Wait()
-	readers.Wait()
-	return waitErr
-}
-
-func privilegedCommand(eggsPath string, args []string) (string, []string, error) {
-	if os.Geteuid() == 0 {
-		return eggsPath, args, nil
-	}
-	pkexecPath, err := exec.LookPath("pkexec")
-	if err != nil {
-		return "", nil, errors.New("pkexec non trovato: installa polkit oppure avvia temporaneamente la GUI come root")
-	}
-	return pkexecPath, append([]string{eggsPath}, args...), nil
-}
-
-func runInteractiveTerminal(eggsPath string, args []string) error {
-	command, commandArgs, err := privilegedCommand(eggsPath, args)
-	if err != nil {
-		return err
-	}
-
-	type terminalCandidate struct {
-		name   string
-		prefix []string
-	}
-	candidates := []terminalCandidate{
-		{name: "x-terminal-emulator", prefix: []string{"-e"}},
-		{name: "gnome-terminal", prefix: []string{"--"}},
-		{name: "konsole", prefix: []string{"-e"}},
-		{name: "xfce4-terminal", prefix: []string{"-x"}},
-		{name: "xterm", prefix: []string{"-e"}},
-	}
-	for _, candidate := range candidates {
-		terminalPath, lookErr := exec.LookPath(candidate.name)
-		if lookErr != nil {
-			continue
-		}
-		terminalArgs := append([]string{}, candidate.prefix...)
-		terminalArgs = append(terminalArgs, command)
-		terminalArgs = append(terminalArgs, commandArgs...)
-		return exec.Command(terminalPath, terminalArgs...).Run()
-	}
-	return errors.New("nessun terminale grafico supportato trovato per il wizard cifrato")
-}
-
-func newestISO(root string, notBefore time.Time) (isoArtifact, error) {
-	var found []isoArtifact
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".iso") {
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if info.ModTime().Before(notBefore.Add(-2 * time.Second)) {
-			return nil
-		}
-		found = append(found, isoArtifact{Path: path, Size: info.Size(), ModTime: info.ModTime()})
-		return nil
-	})
-	if err != nil {
-		return isoArtifact{}, err
-	}
-	if len(found) == 0 {
-		return isoArtifact{}, errors.New("nessuna nuova ISO trovata")
-	}
-	sort.Slice(found, func(i, j int) bool { return found[i].ModTime.After(found[j].ModTime) })
-	return found[0], nil
 }
 
 func humanSize(size int64) string {
