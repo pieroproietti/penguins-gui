@@ -30,8 +30,9 @@ func TestRemasterArgs(t *testing.T) {
 func TestNewestISO(t *testing.T) {
 	root := t.TempDir()
 	oldPath := filepath.Join(root, "old.iso")
-	newPath := filepath.Join(root, "isodir", "new.iso")
-	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+	newPath := filepath.Join(root, "new.iso")
+	nestedPath := filepath.Join(root, "isodir", "nested.iso")
+	if err := os.MkdirAll(filepath.Dir(nestedPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(oldPath, []byte("old"), 0o644); err != nil {
@@ -42,6 +43,13 @@ func TestNewestISO(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(newPath, []byte("new iso"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nestedPath, []byte("nested iso"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	newer := started.Add(time.Minute)
+	if err := os.Chtimes(nestedPath, newer, newer); err != nil {
 		t.Fatal(err)
 	}
 

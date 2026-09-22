@@ -152,6 +152,7 @@ func main() {
 						}
 						openFolder.Show()
 					}
+					dialog.ShowInformation("Remaster completato", "Penguins’ Eggs ha terminato senza errori.\n\n"+result.Text, w)
 				})
 			}
 

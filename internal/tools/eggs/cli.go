@@ -4,7 +4,6 @@ package eggs
 import (
 	"bufio"
 	"errors"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -144,28 +143,26 @@ func (CLIAdapter) RunInteractiveTerminal(eggsPath string, args []string) error {
 	return errors.New("nessun terminale grafico supportato trovato per il wizard cifrato")
 }
 
-// NewestISO finds the latest ISO, allowing two seconds of timestamp tolerance.
+// NewestISO finds the latest ISO directly in root, without scanning subdirectories,
+// allowing two seconds of timestamp tolerance.
 func (CLIAdapter) NewestISO(root string, notBefore time.Time) (ISOArtifact, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return ISOArtifact{}, err
+	}
 	var found []ISOArtifact
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
+	for _, entry := range entries {
 		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".iso") {
-			return nil
+			continue
 		}
 		info, err := entry.Info()
 		if err != nil {
-			return err
+			return ISOArtifact{}, err
 		}
 		if info.ModTime().Before(notBefore.Add(-2 * time.Second)) {
-			return nil
+			continue
 		}
-		found = append(found, ISOArtifact{Path: path, Size: info.Size(), ModTime: info.ModTime()})
-		return nil
-	})
-	if err != nil {
-		return ISOArtifact{}, err
+		found = append(found, ISOArtifact{Path: filepath.Join(root, entry.Name()), Size: info.Size(), ModTime: info.ModTime()})
 	}
 	if len(found) == 0 {
 		return ISOArtifact{}, errors.New("nessuna nuova ISO trovata")
