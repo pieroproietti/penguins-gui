@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Penguins GUI
+Comment=Create a live ISO with Penguins' Eggs
+Exec=penguins-gui
+Icon=penguins-gui
+Terminal=false
+Categories=System;Utility;
+StartupNotify=true

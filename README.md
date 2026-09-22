@@ -65,7 +65,7 @@ polkit to authorize only the `eggs` process.
 - Closing the window does not yet provide a supervised cancellation workflow.
 - The command shown in the log is informational and does not shell-escape paths;
   execution itself uses Go's argument-safe `exec.Command`, not a shell.
-- Packaging and desktop integration are not included yet.
+- Packaging and desktop integration are currently provided only for Debian.
 
 ## Architectural rule
 
@@ -75,3 +75,41 @@ penguins-gui -> eggs -> coa -> oa
 
 Eggs remains fully usable without the GUI, and the GUI only consumes the public
 command-line interface.
+
+## Debian package
+
+On Colibri/Debian, run as a normal user (no sudo):
+
+```bash
+make build
+make package
+```
+
+Packaging requires Git, `dpkg-dev` (including `dpkg-shlibdeps`) and the Fyne
+build dependencies. `make package` rebuilds the GUI and writes a native `.deb`
+to `dist/`. Cross-compilation is not supported by this packaging workflow.
+The standalone Go builder uses only the standard library and has no dependency
+on Penguins Tailor. Its staging/metadata/archive design and Git version rules
+are adapted from Tailor's `pkg/builder`.
+
+The package installs `/usr/bin/penguins-gui`, its desktop launcher and a scalable
+SVG icon. Shared-library dependencies are calculated from the compiled binary
+with `dpkg-shlibdeps`; `penguins-eggs`, `pkexec` and `xdg-utils` are also required
+for the commands the GUI invokes. Encrypted mode additionally needs one of the
+supported graphical terminals listed in `runInteractiveTerminal`.
+
+Versioning follows Tailor: the nearest Git tag loses its leading `v`, and `-`
+and `_` become dots. The Debian revision is the number of commits reachable
+from HEAD but not from any tag, with zero replaced by one. Without tags, the
+base version is `0.1.0` and the revision is the total HEAD commit count (or one
+if Git cannot supply it). Uncommitted changes do not alter the version.
+
+Inspect the archive before installing it:
+
+```bash
+dpkg-deb --info dist/*.deb
+dpkg-deb --contents dist/*.deb
+```
+
+`make clean` removes the built binary and `dist/`. There is no `make install`;
+installation is left to Debian's package manager, separately from building.
