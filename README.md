@@ -113,3 +113,17 @@ dpkg-deb --contents dist/*.deb
 
 `make clean` removes the built binary and `dist/`. There is no `make install`;
 installation is left to Debian's package manager, separately from building.
+
+## Automated packages
+
+The [Hammers workflow](.github/workflows/hammers.yml), adapted from
+[Penguins Tailor](https://github.com/pieroproietti/penguins-tailor/blob/main/.github/workflows/hammers.yml),
+runs on pushes and pull requests to `main`, and can also be started manually
+from GitHub Actions. It tests and builds native amd64 `.deb` packages in Debian
+Bookworm and Trixie containers, using the Go version declared in `go.mod`.
+Tests and packaging run as an unprivileged user; Fyne tests use a virtual display.
+
+Download the package for your Debian release from the run's **Artifacts** section.
+Artifacts are retained for seven days. The workflow inspects package metadata and
+contents; it does not install the package, since its `penguins-eggs` dependency
+is not provided by the standard Debian repositories.

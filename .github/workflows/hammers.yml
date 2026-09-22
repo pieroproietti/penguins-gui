@@ -1,0 +1,79 @@
+name: "🔨 Hammers Matrix (Packaging)"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hammer-build:
+    name: Debian ${{ matrix.release }} (amd64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        release: [bookworm, trixie]
+    container:
+      image: debian:${{ matrix.release }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      CGO_ENABLED: "1"
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git build-essential pkg-config dpkg-dev \
+            libgl1-mesa-dev xorg-dev libxkbcommon-dev \
+            xvfb xauth
+          useradd --create-home --shell /bin/bash artisan
+
+      - name: Check out source and version history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          # Build runs as artisan, with its own module and compilation caches.
+          cache: false
+
+      - name: Prepare unprivileged build
+        run: chown -R artisan:artisan "$GITHUB_WORKSPACE"
+
+      - name: Run tests
+        run: runuser -u artisan -- env PATH="$PATH" xvfb-run -a make test
+
+      - name: Build Debian package
+        run: runuser -u artisan -- env PATH="$PATH" make package
+
+      - name: Inspect Debian package
+        run: |
+          packages=(dist/*.deb)
+          test "${#packages[@]}" -eq 1
+          test -f "${packages[0]}"
+          dpkg-deb --info "${packages[0]}"
+          dpkg-deb --contents "${packages[0]}"
+          test "$(dpkg-deb --field "${packages[0]}" Package)" = penguins-gui
+          test "$(dpkg-deb --field "${packages[0]}" Architecture)" = amd64
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: penguins-gui-debian-${{ matrix.release }}-amd64
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 7
