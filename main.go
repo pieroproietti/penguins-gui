@@ -119,6 +119,7 @@ func main() {
 
 	var isBusy bool
 	var busyMu sync.Mutex
+	var createISOMenuItem *fyne.MenuItem
 
 	runToolCommand := func(title string, args []string, confirmPrompt string) {
 		if detectErr != nil {
@@ -143,6 +144,12 @@ func main() {
 			browse.Disable()
 			mode.Disable()
 			pathEntry.Disable()
+			if createISOMenuItem != nil {
+				createISOMenuItem.Disabled = true
+				if w.MainMenu() != nil {
+					w.MainMenu().Refresh()
+				}
+			}
 			openFolder.Hide()
 			howToBoot.Hide()
 
@@ -163,6 +170,12 @@ func main() {
 					browse.Enable()
 					mode.Enable()
 					pathEntry.Enable()
+					if createISOMenuItem != nil {
+						createISOMenuItem.Disabled = (detectErr != nil)
+						if w.MainMenu() != nil {
+							w.MainMenu().Refresh()
+						}
+					}
 
 					if err != nil {
 						result.SetText(fmt.Sprintf("%s failed: %v", title, err))
@@ -186,7 +199,107 @@ func main() {
 		}
 	}
 
+	createISO := func() {
+		if detectErr != nil {
+			dialog.ShowError(errors.New("Penguins’ Eggs was not found in PATH"), w)
+			return
+		}
+		if err := pathEntry.Validate(); err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+
+		busyMu.Lock()
+		if isBusy {
+			busyMu.Unlock()
+			dialog.ShowInformation("Busy", "Another operation is currently in progress. Please wait until it completes.", w)
+			return
+		}
+		isBusy = true
+		busyMu.Unlock()
+
+		nest := filepath.Clean(pathEntry.Text)
+		selectedMode := eggs.RemasterMode(mode.Selected)
+		args := eggsCLI.RemasterArgs(selectedMode, nest)
+
+		start.Disable()
+		browse.Disable()
+		mode.Disable()
+		pathEntry.Disable()
+		if createISOMenuItem != nil {
+			createISOMenuItem.Disabled = true
+			if w.MainMenu() != nil {
+				w.MainMenu().Refresh()
+			}
+		}
+		result.SetText("Remaster in progress…")
+		openFolder.Hide()
+		howToBoot.Hide()
+		logMu.Lock()
+		logText = ""
+		logMu.Unlock()
+		logGrid.SetText("")
+
+		startedAt := time.Now()
+		go func() {
+			var err error
+			if selectedMode == eggs.ModeEncrypted {
+				appendLog("Encrypted mode uses the interactive Eggs wizard.\n")
+				appendLog("Passphrase and encryption parameters will be requested in a separate terminal.\n\n")
+				err = eggsCLI.RunInteractiveTerminal(eggsPath, args)
+			} else {
+				err = eggsCLI.RunPrivileged(eggsPath, args, appendLog)
+			}
+
+			fyne.Do(func() {
+				busyMu.Lock()
+				isBusy = false
+				busyMu.Unlock()
+
+				start.Enable()
+				browse.Enable()
+				mode.Enable()
+				pathEntry.Enable()
+				if createISOMenuItem != nil {
+					createISOMenuItem.Disabled = (detectErr != nil)
+					if w.MainMenu() != nil {
+						w.MainMenu().Refresh()
+					}
+				}
+
+				if err != nil {
+					result.SetText(fmt.Sprintf("Remaster failed: %v", err))
+					dialog.ShowError(err, w)
+				} else {
+					artifact, findErr := eggsCLI.NewestISO(nest, startedAt)
+					if findErr != nil {
+						result.SetText("Remaster completed, but no new ISO was found in the selected directory.")
+					} else {
+						result.SetText(fmt.Sprintf("ISO created: %s (%s)", artifact.Path, humanSize(artifact.Size)))
+						openFolder.OnTapped = func() {
+							if err := openDirectory(filepath.Dir(artifact.Path)); err != nil {
+								dialog.ShowError(err, w)
+							}
+						}
+						openFolder.Show()
+						howToBoot.Show()
+					}
+					dialog.ShowInformation("Remaster completed", "Penguins’ Eggs finished successfully.\n\n"+result.Text, w)
+				}
+			})
+		}()
+	}
+
+	start.OnTapped = createISO
+
+	createISOMenuItem = fyne.NewMenuItem("Create ISO", createISO)
+	if detectErr != nil {
+		createISOMenuItem.Disabled = true
+	}
+
 	fileMenu := fyne.NewMenu("File",
+		createISOMenuItem,
+		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Quit", func() {
 			a.Quit()
 		}),
@@ -252,80 +365,6 @@ func main() {
 		}),
 	)
 	w.SetMainMenu(fyne.NewMainMenu(fileMenu, editMenu, toolsMenu, helpMenu))
-
-	start.OnTapped = func() {
-		if err := pathEntry.Validate(); err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-
-		busyMu.Lock()
-		if isBusy {
-			busyMu.Unlock()
-			return
-		}
-		isBusy = true
-		busyMu.Unlock()
-
-		nest := filepath.Clean(pathEntry.Text)
-		selectedMode := eggs.RemasterMode(mode.Selected)
-		args := eggsCLI.RemasterArgs(selectedMode, nest)
-
-		start.Disable()
-		browse.Disable()
-		mode.Disable()
-		pathEntry.Disable()
-		result.SetText("Remaster in progress…")
-		openFolder.Hide()
-		howToBoot.Hide()
-		logMu.Lock()
-		logText = ""
-		logMu.Unlock()
-		logGrid.SetText("")
-
-		startedAt := time.Now()
-		go func() {
-			var err error
-			if selectedMode == eggs.ModeEncrypted {
-				appendLog("Encrypted mode uses the interactive Eggs wizard.\n")
-				appendLog("Passphrase and encryption parameters will be requested in a separate terminal.\n\n")
-				err = eggsCLI.RunInteractiveTerminal(eggsPath, args)
-			} else {
-				err = eggsCLI.RunPrivileged(eggsPath, args, appendLog)
-			}
-
-			fyne.Do(func() {
-				busyMu.Lock()
-				isBusy = false
-				busyMu.Unlock()
-
-				start.Enable()
-				browse.Enable()
-				mode.Enable()
-				pathEntry.Enable()
-
-				if err != nil {
-					result.SetText(fmt.Sprintf("Remaster failed: %v", err))
-					dialog.ShowError(err, w)
-				} else {
-					artifact, findErr := eggsCLI.NewestISO(nest, startedAt)
-					if findErr != nil {
-						result.SetText("Remaster completed, but no new ISO was found in the selected directory.")
-					} else {
-						result.SetText(fmt.Sprintf("ISO created: %s (%s)", artifact.Path, humanSize(artifact.Size)))
-						openFolder.OnTapped = func() {
-							if err := openDirectory(filepath.Dir(artifact.Path)); err != nil {
-								dialog.ShowError(err, w)
-							}
-						}
-						openFolder.Show()
-						howToBoot.Show()
-					}
-					dialog.ShowInformation("Remaster completed", "Penguins’ Eggs finished successfully.\n\n"+result.Text, w)
-				}
-			})
-		}()
-	}
 
 	header := container.NewVBox(
 		widget.NewLabelWithStyle("Create an ISO of the running system", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),

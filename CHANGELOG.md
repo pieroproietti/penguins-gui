@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### 🐧 Desktop Interface & Menus
+
+* **File Menu**: Added "Create ISO" to the File menu, replicating the main interface button and synchronizing its availability and busy state.
+* **Application Menus**: Added Edit (delete previous ISOs via `eggs kill`), Tools (`clean`, `grub40`, `repo`, `skel`), and Help (booting/testing guide, documentation link, and about dialog).
+* **PolicyKit Rules & Window Icon**: Added `49-penguins-gui.rules` for privileged execution and customized window branding.
+
 ## Release Notes: penguins-gui v26.9.22 - 2026-09-22
 
 This first release introduces an independent Fyne desktop interface for Penguins'
