@@ -8,6 +8,10 @@
 * **Application Menus**: Added Edit (delete previous ISOs via `eggs kill`), Tools (`clean`, `grub40`, `repo`, `skel`), and Help (booting/testing guide, documentation link, and about dialog).
 * **PolicyKit Rules & Window Icon**: Added `49-penguins-gui.rules` for privileged execution and customized window branding.
 
+### 📦 Packaging & CI
+
+* **Unified Debian Package**: Simplified the Hammers CI workflow to build in a Debian Bookworm container, creating a single `penguins-gui-debian-amd64` artifact compatible with Debian (Bookworm and Trixie), Devuan, and Ubuntu.
+
 ## Release Notes: penguins-gui v26.9.22 - 2026-09-22
 
 This first release introduces an independent Fyne desktop interface for Penguins'
