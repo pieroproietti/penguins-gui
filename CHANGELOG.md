@@ -7,6 +7,7 @@
 * **File Menu**: Added "Create ISO" to the File menu, replicating the main interface button and synchronizing its availability and busy state.
 * **Application Menus**: Added Edit (delete previous ISOs via `eggs kill`), Tools (`clean`, `grub40`, `repo`, `skel`), and Help (booting/testing guide, documentation link, and about dialog).
 * **PolicyKit Rules & Window Icon**: Added `49-penguins-gui.rules` for privileged execution and customized window branding.
+* **GUI Authentication & Encryption Dialogs**: Replaced terminal prompts with native GUI dialogs for administrator authentication during system clones and LUKS passphrase configuration for encrypted clones.
 
 ### 📦 Packaging & CI
 

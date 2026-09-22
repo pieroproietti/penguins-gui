@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -160,7 +161,7 @@ func main() {
 			logGrid.SetText("")
 
 			go func() {
-				err := eggsCLI.RunPrivileged(eggsPath, args, appendLog)
+				err := eggsCLI.RunPrivileged(eggsPath, args, "", "", appendLog)
 				fyne.Do(func() {
 					busyMu.Lock()
 					isBusy = false
@@ -199,6 +200,13 @@ func main() {
 		}
 	}
 
+	needsSudoPassword := func() bool {
+		if os.Geteuid() == 0 {
+			return false
+		}
+		return exec.Command("sudo", "-n", "true").Run() != nil
+	}
+
 	createISO := func() {
 		if detectErr != nil {
 			dialog.ShowError(errors.New("Penguins’ Eggs was not found in PATH"), w)
@@ -215,79 +223,149 @@ func main() {
 			dialog.ShowInformation("Busy", "Another operation is currently in progress. Please wait until it completes.", w)
 			return
 		}
-		isBusy = true
 		busyMu.Unlock()
 
 		nest := filepath.Clean(pathEntry.Text)
 		selectedMode := eggs.RemasterMode(mode.Selected)
 		args := eggsCLI.RemasterArgs(selectedMode, nest)
 
-		start.Disable()
-		browse.Disable()
-		mode.Disable()
-		pathEntry.Disable()
-		if createISOMenuItem != nil {
-			createISOMenuItem.Disabled = true
-			if w.MainMenu() != nil {
-				w.MainMenu().Refresh()
-			}
-		}
-		result.SetText("Remaster in progress…")
-		openFolder.Hide()
-		howToBoot.Hide()
-		logMu.Lock()
-		logText = ""
-		logMu.Unlock()
-		logGrid.SetText("")
-
-		startedAt := time.Now()
-		go func() {
-			var err error
-			if selectedMode == eggs.ModeEncrypted {
-				appendLog("Encrypted mode uses the interactive Eggs wizard.\n")
-				appendLog("Passphrase and encryption parameters will be requested in a separate terminal.\n\n")
-				err = eggsCLI.RunInteractiveTerminal(eggsPath, args)
-			} else {
-				err = eggsCLI.RunPrivileged(eggsPath, args, appendLog)
-			}
-
-			fyne.Do(func() {
-				busyMu.Lock()
-				isBusy = false
+		runRemaster := func(adminPassword, luksPassphrase string) {
+			busyMu.Lock()
+			if isBusy {
 				busyMu.Unlock()
+				return
+			}
+			isBusy = true
+			busyMu.Unlock()
 
-				start.Enable()
-				browse.Enable()
-				mode.Enable()
-				pathEntry.Enable()
-				if createISOMenuItem != nil {
-					createISOMenuItem.Disabled = (detectErr != nil)
-					if w.MainMenu() != nil {
-						w.MainMenu().Refresh()
-					}
+			start.Disable()
+			browse.Disable()
+			mode.Disable()
+			pathEntry.Disable()
+			if createISOMenuItem != nil {
+				createISOMenuItem.Disabled = true
+				if w.MainMenu() != nil {
+					w.MainMenu().Refresh()
 				}
+			}
+			result.SetText("Remaster in progress…")
+			openFolder.Hide()
+			howToBoot.Hide()
+			logMu.Lock()
+			logText = ""
+			logMu.Unlock()
+			logGrid.SetText("")
 
-				if err != nil {
-					result.SetText(fmt.Sprintf("Remaster failed: %v", err))
-					dialog.ShowError(err, w)
-				} else {
-					artifact, findErr := eggsCLI.NewestISO(nest, startedAt)
-					if findErr != nil {
-						result.SetText("Remaster completed, but no new ISO was found in the selected directory.")
-					} else {
-						result.SetText(fmt.Sprintf("ISO created: %s (%s)", artifact.Path, humanSize(artifact.Size)))
-						openFolder.OnTapped = func() {
-							if err := openDirectory(filepath.Dir(artifact.Path)); err != nil {
-								dialog.ShowError(err, w)
-							}
+			startedAt := time.Now()
+			go func() {
+				err := eggsCLI.RunPrivileged(eggsPath, args, adminPassword, luksPassphrase, appendLog)
+
+				fyne.Do(func() {
+					busyMu.Lock()
+					isBusy = false
+					busyMu.Unlock()
+
+					start.Enable()
+					browse.Enable()
+					mode.Enable()
+					pathEntry.Enable()
+					if createISOMenuItem != nil {
+						createISOMenuItem.Disabled = (detectErr != nil)
+						if w.MainMenu() != nil {
+							w.MainMenu().Refresh()
 						}
-						openFolder.Show()
-						howToBoot.Show()
 					}
-					dialog.ShowInformation("Remaster completed", "Penguins’ Eggs finished successfully.\n\n"+result.Text, w)
+
+					if err != nil {
+						result.SetText(fmt.Sprintf("Remaster failed: %v", err))
+						dialog.ShowError(err, w)
+					} else {
+						artifact, findErr := eggsCLI.NewestISO(nest, startedAt)
+						if findErr != nil {
+							result.SetText("Remaster completed, but no new ISO was found in the selected directory.")
+						} else {
+							result.SetText(fmt.Sprintf("ISO created: %s (%s)", artifact.Path, humanSize(artifact.Size)))
+							openFolder.OnTapped = func() {
+								if err := openDirectory(filepath.Dir(artifact.Path)); err != nil {
+									dialog.ShowError(err, w)
+								}
+							}
+							openFolder.Show()
+							howToBoot.Show()
+						}
+						dialog.ShowInformation("Remaster completed", "Penguins’ Eggs finished successfully.\n\n"+result.Text, w)
+					}
+				})
+			}()
+		}
+
+		if selectedMode == eggs.ModeClone && needsSudoPassword() {
+			pwEntry := widget.NewPasswordEntry()
+			pwEntry.PlaceHolder = "Administrator password"
+			items := []*widget.FormItem{
+				widget.NewFormItem("Password", pwEntry),
+			}
+			d := dialog.NewForm("Authentication Required", "Authenticate", "Cancel", items, func(ok bool) {
+				if !ok {
+					return
 				}
-			})
-		}()
+				if strings.TrimSpace(pwEntry.Text) == "" {
+					dialog.ShowError(errors.New("password cannot be empty"), w)
+					return
+				}
+				runRemaster(pwEntry.Text, "")
+			}, w)
+			d.Resize(fyne.NewSize(380, 160))
+			d.Show()
+			return
+		}
+
+		if selectedMode == eggs.ModeEncrypted {
+			luksEntry := widget.NewPasswordEntry()
+			luksEntry.PlaceHolder = "Leave empty for default ('evolution')"
+			luksConfirm := widget.NewPasswordEntry()
+			luksConfirm.PlaceHolder = "Confirm LUKS passphrase"
+
+			items := []*widget.FormItem{
+				widget.NewFormItem("LUKS Passphrase", luksEntry),
+				widget.NewFormItem("Confirm Passphrase", luksConfirm),
+			}
+
+			var adminEntry *widget.Entry
+			if needsSudoPassword() {
+				adminEntry = widget.NewPasswordEntry()
+				adminEntry.PlaceHolder = "Administrator password"
+				items = append(items, widget.NewFormItem("Admin Password", adminEntry))
+			}
+
+			d := dialog.NewForm("Encrypted Clone Configuration", "Create ISO", "Cancel", items, func(ok bool) {
+				if !ok {
+					return
+				}
+				if luksEntry.Text != luksConfirm.Text {
+					dialog.ShowError(errors.New("LUKS passphrases do not match"), w)
+					return
+				}
+				adminPw := ""
+				if adminEntry != nil {
+					if strings.TrimSpace(adminEntry.Text) == "" {
+						dialog.ShowError(errors.New("administrator password cannot be empty"), w)
+						return
+					}
+					adminPw = adminEntry.Text
+				}
+				pass := luksEntry.Text
+				if pass == "" {
+					pass = "evolution"
+				}
+				runRemaster(adminPw, pass)
+			}, w)
+			d.Resize(fyne.NewSize(420, 220))
+			d.Show()
+			return
+		}
+
+		runRemaster("", "")
 	}
 
 	start.OnTapped = createISO

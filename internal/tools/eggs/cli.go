@@ -4,6 +4,7 @@ package eggs
 import (
 	"bufio"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,8 +53,8 @@ func (CLIAdapter) Detect() (path, version string, err error) {
 	return path, version, nil
 }
 
-// RemasterArgs builds the current CLI arguments without shell interpretation.
-func (CLIAdapter) RemasterArgs(mode RemasterMode, nest string) []string {
+// RemasterArgs produces the arguments for a remaster operation.
+func (CLIAdapter) RemasterArgs(mode RemasterMode, workingDirectory string) []string {
 	args := []string{"remaster"}
 	switch mode {
 	case ModeClone:
@@ -61,18 +62,38 @@ func (CLIAdapter) RemasterArgs(mode RemasterMode, nest string) []string {
 	case ModeEncrypted:
 		args = append(args, "--crypted")
 	}
-	return append(args, "--path", nest)
+	if workingDirectory != "" {
+		args = append(args, "--path", workingDirectory)
+	}
+	return args
 }
 
-// RunPrivileged executes Eggs as root or through pkexec and streams both outputs.
-func (CLIAdapter) RunPrivileged(eggsPath string, args []string, appendLog func(string)) error {
-	command, commandArgs, err := privilegedCommand(eggsPath, args)
+// RunPrivileged executes Eggs with root privileges and streams both outputs.
+// If adminPassword is provided, it uses sudo -S to elevate without prompting on the terminal.
+// If luksPassphrase is provided, it passes EGGS_LUKS_PASSPHRASE in the environment for non-interactive encryption.
+func (CLIAdapter) RunPrivileged(eggsPath string, args []string, adminPassword, luksPassphrase string, appendLog func(string)) error {
+	command, commandArgs, err := privilegedCommand(eggsPath, args, adminPassword, luksPassphrase)
 	if err != nil {
 		return err
 	}
 
-	appendLog("$ " + strings.Join(append([]string{command}, commandArgs...), " ") + "\n\n")
+	displayArgs := append([]string{command}, commandArgs...)
+	appendLog("$ " + strings.Join(displayArgs, " ") + "\n\n")
+
 	cmd := exec.Command(command, commandArgs...)
+	if luksPassphrase != "" {
+		cmd.Env = append(os.Environ(), "EGGS_LUKS_PASSPHRASE="+luksPassphrase)
+	}
+
+	var stdinWriter io.WriteCloser
+	if adminPassword != "" {
+		var pipeErr error
+		stdinWriter, pipeErr = cmd.StdinPipe()
+		if pipeErr != nil {
+			return pipeErr
+		}
+	}
+
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
@@ -83,6 +104,11 @@ func (CLIAdapter) RunPrivileged(eggsPath string, args []string, appendLog func(s
 	}
 	if err := cmd.Start(); err != nil {
 		return err
+	}
+
+	if stdinWriter != nil {
+		_, _ = stdinWriter.Write([]byte(adminPassword + "\n"))
+		_ = stdinWriter.Close()
 	}
 
 	var readers sync.WaitGroup
@@ -101,20 +127,49 @@ func (CLIAdapter) RunPrivileged(eggsPath string, args []string, appendLog func(s
 	return waitErr
 }
 
-func privilegedCommand(eggsPath string, args []string) (string, []string, error) {
+func privilegedCommand(eggsPath string, args []string, adminPassword, luksPassphrase string) (string, []string, error) {
 	if os.Geteuid() == 0 {
 		return eggsPath, args, nil
 	}
+
+	if adminPassword != "" {
+		sudoPath, err := exec.LookPath("sudo")
+		if err != nil {
+			return "", nil, errors.New("sudo not found: install sudo or run GUI as root")
+		}
+		cmdArgs := []string{"-S", "-p", ""}
+		if luksPassphrase != "" {
+			cmdArgs = append(cmdArgs, "env", "EGGS_LUKS_PASSPHRASE="+luksPassphrase)
+		}
+		cmdArgs = append(cmdArgs, eggsPath)
+		cmdArgs = append(cmdArgs, args...)
+		return sudoPath, cmdArgs, nil
+	}
+
+	// If running passwordless sudo works, use sudo
+	if sudoPath, err := exec.LookPath("sudo"); err == nil {
+		if exec.Command("sudo", "-n", "true").Run() == nil {
+			cmdArgs := []string{}
+			if luksPassphrase != "" {
+				cmdArgs = append(cmdArgs, "env", "EGGS_LUKS_PASSPHRASE="+luksPassphrase)
+			}
+			cmdArgs = append(cmdArgs, eggsPath)
+			cmdArgs = append(cmdArgs, args...)
+			return sudoPath, cmdArgs, nil
+		}
+	}
+
+	// Fallback to pkexec
 	pkexecPath, err := exec.LookPath("pkexec")
 	if err != nil {
-		return "", nil, errors.New("pkexec not found: install polkit or run GUI as root")
+		return "", nil, errors.New("neither sudo nor pkexec found: install sudo/polkit or run GUI as root")
 	}
 	return pkexecPath, append([]string{eggsPath}, args...), nil
 }
 
 // RunInteractiveTerminal launches the encrypted wizard in the first supported terminal.
 func (CLIAdapter) RunInteractiveTerminal(eggsPath string, args []string) error {
-	command, commandArgs, err := privilegedCommand(eggsPath, args)
+	command, commandArgs, err := privilegedCommand(eggsPath, args, "", "")
 	if err != nil {
 		return err
 	}
