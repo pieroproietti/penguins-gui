@@ -6,6 +6,10 @@ make package "$@"
 . /etc/os-release
 for family in "$ID" ${ID_LIKE:-}; do
     case "$family" in
+        fedora)
+            sudo dnf install dist/penguins-gui-*.rpm
+            exit
+            ;;
         arch|manjaro)
             sudo pacman -U dist/penguins-gui-*.pkg.tar.zst
             exit

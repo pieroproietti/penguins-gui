@@ -19,8 +19,20 @@ Download the `.deb` and install it with:
 sudo apt install ./penguins-gui_26.9.23-1_amd64.deb
 ```
 
+Native Arch and Fedora packages are also built by the packaging workflow.
+On Fedora 44 x86_64, download the RPM and install it with:
+
+```sh
+sudo dnf install ./penguins-gui-26.9.23-1.fc44.x86_64.rpm
+```
+
+Penguins' Eggs must be installed or available from a configured repository.
+The RPM includes the desktop launcher, icon and polkit rule, and declares
+its runtime dependencies. Its license metadata is currently
+`LicenseRef-Unknown`, pending a declared project license.
+
 Run Penguins GUI as a normal desktop user. SHA256SUMS is provided alongside the
-package for download verification.
+packages for download verification.
 
 Known limitations: progress is textual, ISO discovery uses file timestamps, and
 operation cancellation is not yet available. Encrypted-mode secret handling is

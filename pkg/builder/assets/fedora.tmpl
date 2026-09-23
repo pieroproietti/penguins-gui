@@ -1,0 +1,28 @@
+# Package the native binary built by make build, as with Debian and Arch.
+%global debug_package %{nil}
+
+Name: penguins-gui
+Version: {{.BaseVersion}}
+Release: {{.Rel}}%{?dist}
+Summary: Desktop interface for Penguins' Eggs
+# The repository does not yet declare a license; do not invent one.
+License: LicenseRef-Unknown
+URL: https://github.com/pieroproietti/penguins-gui
+Requires: penguins-eggs
+Requires: polkit
+Requires: sudo
+Requires: xdg-utils
+
+%description
+Create live and cloned system images through the Eggs command-line interface.
+
+%install
+mkdir -p "%{buildroot}/usr"
+cp -a "$PENGUINS_GUI_STAGE/usr/." "%{buildroot}/usr/"
+
+%files
+%defattr(-,root,root,-)
+/usr/bin/penguins-gui
+/usr/share/applications/penguins-gui.desktop
+/usr/share/icons/hicolor/scalable/apps/penguins-gui.svg
+/usr/share/polkit-1/rules.d/49-penguins-gui.rules

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* **Fedora packaging**: Added native RPM generation, Fedora detection, installation through `./m`, and a Fedora 44 CI job with release artifacts and checksums.
+
 ## Release Notes: penguins-gui v26.9.23 - 2026-09-23
 
 ### 🐧 Desktop Interface & Menus

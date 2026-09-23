@@ -10,7 +10,10 @@ func TestFamilyFromRelease(t *testing.T) {
 		{"ID=devuan", "debian"},
 		{"ID=custom\nID_LIKE=\"other arch\"", "arch"},
 		{"ID=debian\nID_LIKE=arch", "debian"},
-		{"ID=fedora", ""},
+		{"ID=fedora", "fedora"},
+		{"ID=custom\nID_LIKE=\"fedora rhel\"", "fedora"},
+		{"ID=fedora\nID_LIKE=debian", "fedora"},
+		{"ID=opensuse", ""},
 		{"", ""},
 	} {
 		got, err := familyFromRelease(tc.release)

@@ -136,10 +136,73 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  hammer-fedora:
+    name: Fedora 44 (x86_64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: fedora:44
+    defaults:
+      run:
+        shell: bash
+    env:
+      CGO_ENABLED: "1"
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          dnf install -y \
+            ca-certificates git make gcc golang rpm-build redhat-rpm-config shadow-utils util-linux \
+            pkgconf-pkg-config libX11-devel libXcursor-devel libXrandr-devel \
+            libXinerama-devel libXi-devel libXxf86vm-devel mesa-libGL-devel \
+            libxkbcommon-devel wayland-devel xorg-x11-server-Xvfb xorg-x11-xauth
+          useradd --create-home --shell /bin/bash artisan
+
+      - name: Check out source and version history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          # Build runs as artisan, with its own module and compilation caches.
+          cache: false
+
+      - name: Prepare unprivileged build
+        run: chown -R artisan:artisan "$GITHUB_WORKSPACE"
+
+      - name: Run tests
+        run: runuser -u artisan -- env PATH="$PATH" xvfb-run -a make test
+
+      - name: Build Fedora package
+        run: runuser -u artisan -- env PATH="$PATH" make package
+
+      - name: Inspect Fedora package
+        run: |
+          packages=(dist/*.rpm)
+          test "${#packages[@]}" -eq 1
+          test -f "${packages[0]}"
+          rpm -qip "${packages[0]}"
+          rpm -qlp "${packages[0]}"
+          rpm -qp --requires "${packages[0]}"
+          test "$(rpm -qp --queryformat '%{NAME}' "${packages[0]}")" = penguins-gui
+          test "$(rpm -qp --queryformat '%{ARCH}' "${packages[0]}")" = x86_64
+
+      - name: Upload Fedora package
+        uses: actions/upload-artifact@v4
+        with:
+          name: penguins-gui-fedora-x86_64
+          path: dist/*.rpm
+          if-no-files-found: error
+          retention-days: 7
+
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [hammer-build, hammer-arch]
+    needs: [hammer-build, hammer-arch, hammer-fedora]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -156,7 +219,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           cd dist
-          sha256sum ./*.deb ./*.pkg.tar.zst > SHA256SUMS
-          gh release create "$RELEASE_TAG" ./*.deb ./*.pkg.tar.zst SHA256SUMS \
+          sha256sum ./*.deb ./*.pkg.tar.zst ./*.rpm > SHA256SUMS
+          gh release create "$RELEASE_TAG" ./*.deb ./*.pkg.tar.zst ./*.rpm SHA256SUMS \
             --verify-tag --title "Penguins GUI $RELEASE_TAG" \
             --notes-file ../RELEASE_NOTES.md

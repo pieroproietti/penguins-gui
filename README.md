@@ -78,7 +78,7 @@ command is elevated, through sudo or polkit.
 - Closing the window is blocked while an operation is running; supervised cancellation is not yet available.
 - The command shown in the log is informational and does not shell-escape paths;
   execution itself uses Go's argument-safe `exec.Command`, not a shell.
-- Native packaging currently supports Debian and Arch Linux families.
+- Native packaging currently supports Debian, Arch Linux and Fedora families.
 
 ## Architectural rule
 
@@ -89,9 +89,9 @@ penguins-gui -> eggs -> coa -> oa
 Eggs remains fully usable without the GUI, and the GUI only consumes the public
 command-line interface.
 
-## Native packages (Debian and Arch)
+## Native packages (Debian, Arch and Fedora)
 
-On Debian/Ubuntu/Devuan or Arch/Manjaro, run as a normal user (no sudo):
+On Debian/Ubuntu/Devuan, Arch/Manjaro or Fedora, run as a normal user (no sudo):
 
 ```bash
 make build
@@ -135,10 +135,32 @@ As in Tailor, the recipe packages the staged native binary and desktop assets.
 Runtime dependencies are recorded in the archive and checked by pacman at
 installation; they need not be installed on the build host.
 The shared staging step and separate distribution packagers allow additional
-formats to be added later. The Git version rules apply to both formats.
+formats to be added later. The Git version rules apply to all three formats.
+
+On Fedora, install the build prerequisites (Go 1.25 or later is required):
+
+```bash
+sudo dnf install golang git make gcc rpm-build redhat-rpm-config pkgconf-pkg-config libX11-devel libXcursor-devel libXrandr-devel libXinerama-devel libXi-devel libXxf86vm-devel mesa-libGL-devel libxkbcommon-devel wayland-devel
+make package
+rpm -qip dist/*.rpm
+rpm -qlp dist/*.rpm
+rpm -qp --requires dist/*.rpm
+sudo dnf install ./dist/penguins-gui-*.rpm
+```
+
+Fedora packaging uses a generated RPM spec and `rpmbuild`, producing
+`dist/penguins-gui-VERSION-REVISION.fc44.x86_64.rpm` on Fedora 44 x86_64
+(the distribution suffix and architecture follow the build host; aarch64 is
+also supported). RPM detects shared-library dependencies from the binary;
+`penguins-eggs`, `polkit`, `sudo` and `xdg-utils` are explicit requirements.
+Penguins' Eggs must be installed or available from a configured repository.
+Like the other formats, this packages a locally built binary and is intended
+for direct distribution, not submission to Fedora's official repositories.
+The RPM currently records `LicenseRef-Unknown` because this repository has no
+declared license; replace it when the project license is established.
 
 `./m` cleans, builds and installs the native package with `sudo pacman -U`
-or `sudo dpkg -i`, following Tailor's convenience script.
+`sudo dpkg -i` or `sudo dnf install`, following Tailor's convenience script.
 
 Inspect the Debian archive before installing it:
 
@@ -158,13 +180,14 @@ runs on pushes and pull requests to `main`, on version tags, and can also be sta
 from GitHub Actions. It tests and builds a native amd64 `.deb` package in a Debian
 Bookworm container, compatible with Debian (Bookworm and Trixie), Devuan, and Ubuntu,
 using the Go version declared in `go.mod`. A separate Arch Linux job builds
-and inspects the native x86_64 `.pkg.tar.zst` package.
+and inspects the native x86_64 `.pkg.tar.zst` package. A Fedora 44 job builds
+and inspects the x86_64 RPM, including its runtime dependencies.
 Tests and packaging run as an unprivileged user; Fyne tests use a virtual display.
 
-Download the package from the run's **Artifacts** section (`penguins-gui-debian-amd64` or `penguins-gui-arch-x86_64`).
+Download the package from the run's **Artifacts** section (`penguins-gui-debian-amd64`, `penguins-gui-arch-x86_64` or `penguins-gui-fedora-x86_64`).
 Artifacts are retained for seven days. The workflow inspects package metadata and
 contents; it does not install the package, since its `penguins-eggs` dependency
 is not provided by the standard Debian repositories.
 
 Version tags (`v*`) also publish a GitHub Release after the build succeeds, with
-both native packages and SHA256 checksums attached for permanent download.
+all three native packages and SHA256 checksums attached for permanent download.
