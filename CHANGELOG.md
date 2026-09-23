@@ -1,9 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## Release Notes: penguins-gui v26.9.23 - 2026-09-23
 
 ### 🐧 Desktop Interface & Menus
 
+* **Log Actions**: Added compact "Clear" and "Copy" buttons beside the log heading and corresponding Edit menu actions, with inline feedback. Clearing the log leaves the running operation active and continues displaying new output.
+* **Dialog Icons**: Added icons to authentication, encryption, boot guide and About dialogs, complementing the native information, error and confirmation icons.
+* **Exit & Layout Polish**: Added an Exit button at the right of the toolbar, highlighted Create ISO and added consistent window padding. Toolbar, menu and window-close actions keep the GUI open while an operation is running.
 * **File Menu**: Added "Create ISO" to the File menu, replicating the main interface button and synchronizing its availability and busy state.
 * **Application Menus**: Added Edit (compact "Kill…" command for `eggs kill`), Tools (`clean`, `grub40`, `repo`, `skel`), and Help (booting/testing guide, documentation link, and about dialog).
 * **PolicyKit Rules & Window Icon**: Added `49-penguins-gui.rules` for privileged execution and customized window branding.

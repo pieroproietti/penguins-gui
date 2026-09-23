@@ -3,6 +3,7 @@ name: "🔨 Hammers (Packaging)"
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -73,3 +74,27 @@ jobs:
           path: dist/*.deb
           if-no-files-found: error
           retention-days: 7
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: hammer-build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: penguins-gui-debian-amd64
+          path: dist
+      - name: Publish package and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cd dist
+          sha256sum ./*.deb > SHA256SUMS
+          gh release create "$RELEASE_TAG" ./*.deb SHA256SUMS \
+            --verify-tag --title "Penguins GUI $RELEASE_TAG" \
+            --notes-file ../RELEASE_NOTES.md

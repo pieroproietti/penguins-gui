@@ -6,23 +6,26 @@ Minimal, independent desktop GUI for Penguins' Eggs.
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
-The prototype deliberately does one thing: it starts an Eggs remaster, displays
-the live output and locates the ISO created at the end. It does not import Eggs
+The GUI starts Eggs remasters, displays live output, locates the resulting ISO
+and provides access to common maintenance commands. It does not import Eggs
 internals and does not modify Penguins' Eggs.
 
 ## Current scope
 
-- Detect `eggs` in `PATH` and show its version.
+- Detect `eggs` in `PATH` and show its version in About.
 - Select one of the three existing remaster modes:
   - standard live;
   - system clone (`--clone`);
   - encrypted clone (`--crypted`).
-- Select the Eggs working directory (`--path`).
-- Request administrative authorization through `pkexec`/polkit.
-- Display stdout and stderr while Eggs runs in standard and clone modes.
-- Open Eggs' existing interactive TUI in a terminal for encrypted mode.
-- Find the newest ISO created beneath the selected working directory.
+- Use `/home/eggs` as the working directory.
+- Request administrative authorization through sudo or `pkexec`/polkit.
+- Configure encrypted clones through a graphical passphrase dialog.
+- Display live stdout and stderr, with Clear and Copy log actions.
+- Find the newest ISO created directly in `/home/eggs`.
 - Open the ISO directory with `xdg-open`.
+- Run maintenance commands from menus and the action toolbar.
+- Adjust font zoom and retain the preference between sessions.
+- Prevent closing the GUI while an operation is running.
 
 Krill, AI assistance, configuration editing and artifact management are
 intentionally outside this first prototype.
@@ -38,6 +41,8 @@ for that stage.
 - Go 1.25 or later
 - Penguins' Eggs installed and available as `eggs`
 - polkit with `pkexec` when the GUI is not already running as root
+- `sudo` for the administrator-password dialogs used by clone modes
+- For graphical encrypted clones, an Eggs version supporting `EGGS_LUKS_PASSPHRASE`
 - Fyne build dependencies for the distribution
 
 See the official Fyne documentation for the development packages required by
@@ -59,19 +64,18 @@ go build -o penguins-gui .
 
 The same operations are available as `make test`, `make build` and `make run`.
 
-Do not launch the whole GUI with `sudo` for ordinary use. The prototype asks
-polkit to authorize only the `eggs` process.
+Do not launch the whole GUI with `sudo` for ordinary use. Only the external
+command is elevated, through sudo or polkit.
 
 ## Known prototype limitations
 
 - Eggs currently emits textual output, so the GUI shows a live log but not a
   reliable percentage progress bar.
-- Encrypted remastering still requires Eggs' interactive TUI for the passphrase
-  and crypto parameters. The prototype opens that flow in a separate terminal;
-  its detailed log therefore remains in that terminal.
+- Graphical encrypted remastering requires Eggs support for the passphrase
+  environment variable and uses its default crypto parameters.
 - The final artifact is discovered by scanning for a recently modified `.iso`
-  below the selected working directory.
-- Closing the window does not yet provide a supervised cancellation workflow.
+  directly in `/home/eggs`.
+- Closing the window is blocked while an operation is running; supervised cancellation is not yet available.
 - The command shown in the log is informational and does not shell-escape paths;
   execution itself uses Go's argument-safe `exec.Command`, not a shell.
 - Packaging and desktop integration are currently provided only for Debian.
@@ -104,8 +108,8 @@ are adapted from Tailor's `pkg/builder`.
 The package installs `/usr/bin/penguins-gui`, its desktop launcher and a scalable
 SVG icon. Shared-library dependencies are calculated from the compiled binary
 with `dpkg-shlibdeps`; `penguins-eggs`, `pkexec` and `xdg-utils` are also required
-for the commands the GUI invokes. Encrypted mode additionally needs one of the
-supported graphical terminals listed in `runInteractiveTerminal`.
+for the commands the GUI invokes. Clone authentication dialogs additionally
+require `sudo`.
 
 Versioning follows Tailor: the nearest Git tag loses its leading `v`, and `-`
 and `_` become dots. The Debian revision is the number of commits reachable
@@ -127,7 +131,7 @@ installation is left to Debian's package manager, separately from building.
 
 The [Hammers workflow](.github/workflows/hammers.yml), adapted from
 [Penguins Tailor](https://github.com/pieroproietti/penguins-tailor/blob/main/.github/workflows/hammers.yml),
-runs on pushes and pull requests to `main`, and can also be started manually
+runs on pushes and pull requests to `main`, on version tags, and can also be started manually
 from GitHub Actions. It tests and builds a native amd64 `.deb` package in a Debian
 Bookworm container, compatible with Debian (Bookworm and Trixie), Devuan, and Ubuntu,
 using the Go version declared in `go.mod`.
@@ -137,3 +141,6 @@ Download the package from the run's **Artifacts** section (`penguins-gui-debian-
 Artifacts are retained for seven days. The workflow inspects package metadata and
 contents; it does not install the package, since its `penguins-eggs` dependency
 is not provided by the standard Debian repositories.
+
+Version tags (`v*`) also publish a GitHub Release after the build succeeds, with
+the Debian package and SHA256 checksums attached for permanent download.

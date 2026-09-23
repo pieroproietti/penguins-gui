@@ -39,7 +39,7 @@ var iconSVG []byte
 var (
 	appIcon           = fyne.NewStaticResource("penguins-gui.svg", iconSVG)
 	ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
-	guiVersion        = "v26.9.22"
+	guiVersion        = "v26.9.23"
 	author            = defaultAuthor
 )
 
@@ -47,7 +47,7 @@ func getGUIVersion() string {
 	if guiVersion != "" && guiVersion != "devel" {
 		return guiVersion
 	}
-	return "v26.9.22"
+	return "v26.9.23"
 }
 
 func main() {
@@ -110,9 +110,11 @@ func main() {
 	appendLog := func(text string) {
 		logMu.Lock()
 		logText += stripANSI(text)
-		current := logText
 		logMu.Unlock()
 		fyne.Do(func() {
+			logMu.Lock()
+			current := logText
+			logMu.Unlock()
 			logGrid.SetText(current)
 			logScroll.ScrollToBottom()
 		})
@@ -139,6 +141,43 @@ func main() {
 			explanationLabel.SetText(defaultExplanation)
 		})
 	}
+
+	copyLog := func() {
+		logMu.Lock()
+		text := logText
+		logMu.Unlock()
+		if text == "" {
+			setExplanation("The log is empty. Run an operation to see its output here.")
+			return
+		}
+		w.Clipboard().SetContent(text)
+		setExplanation("Log copied to clipboard.")
+	}
+	tbCopyLog := newActionButton("Copy", theme.ContentCopyIcon(), copyLog,
+		func() { setExplanation("Copy the current operation log to the clipboard.") }, resetExplanation)
+	clearLog := func() {
+		logMu.Lock()
+		logText = ""
+		logMu.Unlock()
+		logGrid.SetText("")
+		setExplanation("Log cleared. Any new output will continue to appear here.")
+	}
+	tbClearLog := newActionButton("Clear", theme.ContentClearIcon(), clearLog,
+		func() { setExplanation("Clear the displayed log without stopping the current operation.") }, resetExplanation)
+
+	quit := func() {
+		busyMu.Lock()
+		busy := isBusy
+		busyMu.Unlock()
+		if busy {
+			dialog.ShowInformation("Operation in progress", "Please wait until the current operation finishes before closing Penguins GUI.", w)
+			return
+		}
+		a.Quit()
+	}
+	w.SetCloseIntercept(quit)
+	tbQuit := newActionButton("Exit", theme.LogoutIcon(), quit,
+		func() { setExplanation("Close Penguins GUI after the current operation has finished.") }, resetExplanation)
 
 	runToolCommand := func(title string, args []string, confirmPrompt string) {
 		if detectErr != nil {
@@ -289,6 +328,7 @@ func main() {
 			pwEntry := widget.NewPasswordEntry()
 			pwEntry.PlaceHolder = "Administrator password"
 			items := []*widget.FormItem{
+				widget.NewFormItem("", widget.NewIcon(theme.LoginIcon())),
 				widget.NewFormItem("Password", pwEntry),
 			}
 			d := dialog.NewForm("Authentication Required", "Authenticate", "Cancel", items, func(ok bool) {
@@ -313,6 +353,7 @@ func main() {
 			luksConfirm.PlaceHolder = "Confirm LUKS passphrase"
 
 			items := []*widget.FormItem{
+				widget.NewFormItem("", widget.NewIcon(theme.AccountIcon())),
 				widget.NewFormItem("LUKS Passphrase", luksEntry),
 				widget.NewFormItem("Confirm Passphrase", luksConfirm),
 			}
@@ -406,6 +447,7 @@ func main() {
 		},
 		resetExplanation,
 	)
+	tbCreateISO.Importance = widget.HighImportance
 
 	tbKill = newActionButton(
 		"Kill",
@@ -520,11 +562,12 @@ func main() {
 	fileMenu := fyne.NewMenu("File",
 		createISOMenuItem,
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Quit", func() {
-			a.Quit()
-		}),
+		fyne.NewMenuItem("Quit", quit),
 	)
 	editMenu := fyne.NewMenu("Edit",
+		fyne.NewMenuItem("Copy log", copyLog),
+		fyne.NewMenuItem("Clear log", clearLog),
+		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Kill…", func() {
 			setExplanation("Kill (eggs kill): Delete previous ISOs and clean the build nest (/home/eggs).")
 			killAction()
@@ -569,7 +612,9 @@ func main() {
 				author,
 				eggsVersion,
 			)
-			dialog.ShowInformation("About Penguins GUI", aboutText, w)
+			about := dialog.NewCustom("About Penguins GUI", "Close", widget.NewLabel(aboutText), w)
+			about.SetIcon(appIcon)
+			about.Show()
 		}),
 	)
 	var applyFontScale func(float32)
@@ -667,7 +712,7 @@ func main() {
 
 	w.SetMainMenu(fyne.NewMainMenu(fileMenu, editMenu, viewMenu, toolsMenu, helpMenu))
 
-	toolbarRow := container.NewHBox(
+	toolbarActions := container.NewHBox(
 		tbCreateISO,
 		widget.NewSeparator(),
 		tbKill,
@@ -676,6 +721,7 @@ func main() {
 		widget.NewSeparator(),
 		tbDocs,
 	)
+	toolbarRow := container.NewBorder(nil, nil, toolbarActions, tbQuit, layout.NewSpacer())
 
 	toolbarBox := container.NewVBox(
 		toolbarRow,
@@ -688,7 +734,9 @@ func main() {
 		mode,
 		modeHelp,
 		widget.NewSeparator(),
-		widget.NewLabelWithStyle("Log", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		container.NewBorder(nil, nil,
+			widget.NewLabelWithStyle("Operation log", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			container.NewHBox(tbClearLog, tbCopyLog), nil),
 	)
 
 	footer := container.NewVBox(
@@ -696,7 +744,7 @@ func main() {
 		result,
 		container.NewHBox(layout.NewSpacer(), howToBoot, openFolder),
 	)
-	w.SetContent(container.NewBorder(container.NewVBox(toolbarBox, controls), footer, nil, nil, logScroll))
+	w.SetContent(container.NewPadded(container.NewBorder(container.NewVBox(toolbarBox, controls), footer, nil, nil, logScroll)))
 	w.ShowAndRun()
 }
 
@@ -769,6 +817,7 @@ sudo dd if=/path/to/egg.iso of=/dev/sdX bs=4M status=progress oflag=sync
 	scroll.SetMinSize(fyne.NewSize(580, 420))
 
 	d := dialog.NewCustom("Testing & Booting the ISO", "Close", scroll, parent)
+	d.SetIcon(theme.HelpIcon())
 	d.Resize(fyne.NewSize(620, 480))
 	d.Show()
 }
