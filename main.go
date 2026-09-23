@@ -13,19 +13,24 @@ import (
 	"sync"
 	"time"
 
+	"math"
+
 	"github.com/pieroproietti/penguins-gui/internal/tools/eggs"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
 const (
 	applicationID = "net.penguins-eggs.gui"
 	defaultNest   = "/home/eggs"
+	defaultAuthor = "Piero Proietti <piero.proietti@gmail.com>"
 )
 
 //go:embed pkg/builder/assets/penguins-gui.svg
@@ -34,19 +39,42 @@ var iconSVG []byte
 var (
 	appIcon           = fyne.NewStaticResource("penguins-gui.svg", iconSVG)
 	ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
+	guiVersion        = "v26.9.22"
+	author            = defaultAuthor
 )
+
+func getGUIVersion() string {
+	if guiVersion != "" && guiVersion != "devel" {
+		return guiVersion
+	}
+	return "v26.9.22"
+}
 
 func main() {
 	a := app.NewWithID(applicationID)
 	a.SetIcon(appIcon)
+
+	currentScale := float32(a.Preferences().FloatWithFallback(preferenceFontScale, float64(defaultScale)))
+	currentScale = clampScale(currentScale)
+	if currentScale != defaultScale {
+		a.Settings().SetTheme(newScaledTheme(theme.DefaultTheme(), currentScale))
+	}
+
 	w := a.NewWindow("Penguins GUI")
 	w.SetIcon(appIcon)
-	w.Resize(fyne.NewSize(820, 650))
+
+	initialWidth := float32(math.Round(float64(900 * currentScale)))
+	initialHeight := float32(math.Round(float64(700 * currentScale)))
+	if initialWidth < 900 {
+		initialWidth = 900
+	}
+	if initialHeight < 700 {
+		initialHeight = 700
+	}
+	w.Resize(fyne.NewSize(initialWidth, initialHeight))
 
 	eggsCLI := eggs.CLIAdapter{}
 	eggsPath, eggsVersion, detectErr := eggsCLI.Detect()
-	status := widget.NewLabel(eggsVersion)
-	status.Wrapping = fyne.TextWrapWord
 
 	mode := widget.NewRadioGroup([]string{
 		string(eggs.ModeStandard),
@@ -62,28 +90,6 @@ func main() {
 		modeHelp.SetText(modeDescription(eggs.RemasterMode(selected)))
 	}
 
-	pathEntry := widget.NewEntry()
-	pathEntry.SetText(defaultNest)
-	pathEntry.Validator = func(value string) error {
-		if strings.TrimSpace(value) == "" {
-			return errors.New("select a working directory")
-		}
-		return nil
-	}
-
-	browse := widget.NewButton("Browse…", func() {
-		d := dialog.NewFolderOpen(func(uri fyne.ListableURI, err error) {
-			if err != nil {
-				dialog.ShowError(err, w)
-				return
-			}
-			if uri != nil {
-				pathEntry.SetText(uri.Path())
-			}
-		}, w)
-		d.Show()
-	})
-
 	logGrid := widget.NewTextGrid()
 	logGrid.SetText("Waiting.\n")
 	logScroll := container.NewScroll(logGrid)
@@ -98,12 +104,6 @@ func main() {
 		showBootGuideDialog(w)
 	})
 	howToBoot.Hide()
-
-	start := widget.NewButton("Create ISO", nil)
-	if detectErr != nil {
-		start.Disable()
-		status.SetText("Penguins’ Eggs was not found in PATH. Install eggs and restart the application.")
-	}
 
 	var logMu sync.Mutex
 	logText := ""
@@ -121,6 +121,24 @@ func main() {
 	var isBusy bool
 	var busyMu sync.Mutex
 	var createISOMenuItem *fyne.MenuItem
+	var tbCreateISO, tbKill, tbClean, tbGrub, tbDocs *actionButton
+	var setButtonsEnabled func(bool)
+
+	const defaultExplanation = "Select or hover over an action to view its description."
+	explanationLabel := widget.NewLabel(defaultExplanation)
+	explanationLabel.TextStyle = fyne.TextStyle{Italic: true}
+	explanationLabel.Wrapping = fyne.TextWrapWord
+
+	setExplanation := func(text string) {
+		fyne.Do(func() {
+			explanationLabel.SetText(text)
+		})
+	}
+	resetExplanation := func() {
+		fyne.Do(func() {
+			explanationLabel.SetText(defaultExplanation)
+		})
+	}
 
 	runToolCommand := func(title string, args []string, confirmPrompt string) {
 		if detectErr != nil {
@@ -141,15 +159,8 @@ func main() {
 			isBusy = true
 			busyMu.Unlock()
 
-			start.Disable()
-			browse.Disable()
-			mode.Disable()
-			pathEntry.Disable()
-			if createISOMenuItem != nil {
-				createISOMenuItem.Disabled = true
-				if w.MainMenu() != nil {
-					w.MainMenu().Refresh()
-				}
+			if setButtonsEnabled != nil {
+				setButtonsEnabled(false)
 			}
 			openFolder.Hide()
 			howToBoot.Hide()
@@ -167,15 +178,8 @@ func main() {
 					isBusy = false
 					busyMu.Unlock()
 
-					start.Enable()
-					browse.Enable()
-					mode.Enable()
-					pathEntry.Enable()
-					if createISOMenuItem != nil {
-						createISOMenuItem.Disabled = (detectErr != nil)
-						if w.MainMenu() != nil {
-							w.MainMenu().Refresh()
-						}
+					if setButtonsEnabled != nil {
+						setButtonsEnabled(true)
 					}
 
 					if err != nil {
@@ -212,10 +216,6 @@ func main() {
 			dialog.ShowError(errors.New("Penguins’ Eggs was not found in PATH"), w)
 			return
 		}
-		if err := pathEntry.Validate(); err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
 
 		busyMu.Lock()
 		if isBusy {
@@ -225,7 +225,7 @@ func main() {
 		}
 		busyMu.Unlock()
 
-		nest := filepath.Clean(pathEntry.Text)
+		nest := defaultNest
 		selectedMode := eggs.RemasterMode(mode.Selected)
 		args := eggsCLI.RemasterArgs(selectedMode, nest)
 
@@ -238,15 +238,8 @@ func main() {
 			isBusy = true
 			busyMu.Unlock()
 
-			start.Disable()
-			browse.Disable()
-			mode.Disable()
-			pathEntry.Disable()
-			if createISOMenuItem != nil {
-				createISOMenuItem.Disabled = true
-				if w.MainMenu() != nil {
-					w.MainMenu().Refresh()
-				}
+			if setButtonsEnabled != nil {
+				setButtonsEnabled(false)
 			}
 			result.SetText("Remaster in progress…")
 			openFolder.Hide()
@@ -265,15 +258,8 @@ func main() {
 					isBusy = false
 					busyMu.Unlock()
 
-					start.Enable()
-					browse.Enable()
-					mode.Enable()
-					pathEntry.Enable()
-					if createISOMenuItem != nil {
-						createISOMenuItem.Disabled = (detectErr != nil)
-						if w.MainMenu() != nil {
-							w.MainMenu().Refresh()
-						}
+					if setButtonsEnabled != nil {
+						setButtonsEnabled(true)
 					}
 
 					if err != nil {
@@ -368,9 +354,165 @@ func main() {
 		runRemaster("", "")
 	}
 
-	start.OnTapped = createISO
+	killAction := func() {
+		runToolCommand(
+			"Kill (delete previous ISOs)",
+			[]string{"kill"},
+			"Delete previous ISOs and clean the build nest (/home/eggs)?",
+		)
+	}
 
-	createISOMenuItem = fyne.NewMenuItem("Create ISO", createISO)
+	cleanAction := func() {
+		runToolCommand(
+			"Clean system remnants",
+			[]string{"tools", "clean"},
+			"Clean log rotation, package manager cache, and host system remnants?",
+		)
+	}
+
+	grubAction := func() {
+		runToolCommand(
+			"Configure GRUB loopback",
+			[]string{"tools", "grub40"},
+			"Generate GRUB configuration to boot ANY ISO via loopback?",
+		)
+	}
+
+	repoAction := func() {
+		runToolCommand(
+			"Manage repository",
+			[]string{"tools", "repo"},
+			"Add or remove the official penguins-eggs repository?",
+		)
+	}
+
+	skelAction := func() {
+		runToolCommand(
+			"Update /etc/skel",
+			[]string{"tools", "skel"},
+			"Create /etc/skel based on the current user's configurations?",
+		)
+	}
+
+	tbCreateISO = newActionButton(
+		"Create ISO",
+		theme.DocumentCreateIcon(),
+		func() {
+			setExplanation("Create ISO: Remastering running system into a live ISO…")
+			createISO()
+		},
+		func() {
+			setExplanation("Create ISO: Remaster the running system into a live ISO image using the selected mode.")
+		},
+		resetExplanation,
+	)
+
+	tbKill = newActionButton(
+		"Kill",
+		theme.DeleteIcon(),
+		func() {
+			setExplanation("Kill (eggs kill): Delete previous ISOs and clean the build nest (/home/eggs).")
+			killAction()
+		},
+		func() {
+			setExplanation("Kill (eggs kill): Delete previous ISOs and clean the build nest (/home/eggs).")
+		},
+		resetExplanation,
+	)
+
+	tbClean = newActionButton(
+		"Clean",
+		theme.ViewRefreshIcon(),
+		func() {
+			setExplanation("Clean (eggs tools clean): Clean log rotation, package cache, and host remnants.")
+			cleanAction()
+		},
+		func() {
+			setExplanation("Clean (eggs tools clean): Clean log rotation, package manager cache, and host system remnants.")
+		},
+		resetExplanation,
+	)
+
+	tbGrub = newActionButton(
+		"GRUB",
+		theme.ComputerIcon(),
+		func() {
+			setExplanation("Configure GRUB loopback (eggs tools grub40): Generate GRUB config to boot ANY ISO via loopback.")
+			grubAction()
+		},
+		func() {
+			setExplanation("Configure GRUB loopback (eggs tools grub40): Generate GRUB configuration to boot ANY ISO via loopback.")
+		},
+		resetExplanation,
+	)
+
+	tbDocs = newActionButton(
+		"Docs",
+		theme.HelpIcon(),
+		func() {
+			setExplanation("Documentation: Opening official site (https://penguins-eggs.net)…")
+			if u, err := url.Parse("https://penguins-eggs.net"); err == nil {
+				_ = a.OpenURL(u)
+			}
+		},
+		func() {
+			setExplanation("Documentation: Open official Penguins' Eggs documentation website (https://penguins-eggs.net).")
+		},
+		resetExplanation,
+	)
+
+	setButtonsEnabled = func(enabled bool) {
+		if enabled && detectErr == nil {
+			mode.Enable()
+			if tbCreateISO != nil {
+				tbCreateISO.Enable()
+			}
+			if tbKill != nil {
+				tbKill.Enable()
+			}
+			if tbClean != nil {
+				tbClean.Enable()
+			}
+			if tbGrub != nil {
+				tbGrub.Enable()
+			}
+			if createISOMenuItem != nil {
+				createISOMenuItem.Disabled = false
+				if w.MainMenu() != nil {
+					w.MainMenu().Refresh()
+				}
+			}
+		} else {
+			mode.Disable()
+			if tbCreateISO != nil {
+				tbCreateISO.Disable()
+			}
+			if tbKill != nil {
+				tbKill.Disable()
+			}
+			if tbClean != nil {
+				tbClean.Disable()
+			}
+			if tbGrub != nil {
+				tbGrub.Disable()
+			}
+			if createISOMenuItem != nil {
+				createISOMenuItem.Disabled = true
+				if w.MainMenu() != nil {
+					w.MainMenu().Refresh()
+				}
+			}
+		}
+	}
+
+	if detectErr != nil {
+		setButtonsEnabled(false)
+	}
+
+	createISOMenuItem = fyne.NewMenuItem("Create ISO", func() {
+		setExplanation("Create ISO: Remastering running system into a live ISO…")
+		createISO()
+	})
 	if detectErr != nil {
 		createISOMenuItem.Disabled = true
 	}
@@ -383,42 +525,27 @@ func main() {
 		}),
 	)
 	editMenu := fyne.NewMenu("Edit",
-		fyne.NewMenuItem("Delete previous ISOs (eggs kill)…", func() {
-			runToolCommand(
-				"Delete previous ISOs",
-				[]string{"kill"},
-				"Are you sure you want to delete previous ISOs and clean the build nest?",
-			)
+		fyne.NewMenuItem("Kill…", func() {
+			setExplanation("Kill (eggs kill): Delete previous ISOs and clean the build nest (/home/eggs).")
+			killAction()
 		}),
 	)
 	toolsMenu := fyne.NewMenu("Tools",
 		fyne.NewMenuItem("Clean system remnants (clean)…", func() {
-			runToolCommand(
-				"Clean system remnants",
-				[]string{"tools", "clean"},
-				"Clean log rotation, package manager cache, and host system remnants?",
-			)
+			setExplanation("Clean (eggs tools clean): Clean log rotation, package manager cache, and host system remnants.")
+			cleanAction()
 		}),
 		fyne.NewMenuItem("Configure GRUB loopback (grub40)…", func() {
-			runToolCommand(
-				"Configure GRUB loopback",
-				[]string{"tools", "grub40"},
-				"Generate GRUB configuration to boot ANY ISO via loopback?",
-			)
+			setExplanation("Configure GRUB loopback (eggs tools grub40): Generate GRUB configuration to boot ANY ISO via loopback.")
+			grubAction()
 		}),
 		fyne.NewMenuItem("Manage repository (repo)…", func() {
-			runToolCommand(
-				"Manage repository",
-				[]string{"tools", "repo"},
-				"Add or remove the official penguins-eggs repository?",
-			)
+			setExplanation("Manage repository (eggs tools repo): Add or remove the official penguins-eggs repository.")
+			repoAction()
 		}),
 		fyne.NewMenuItem("Update /etc/skel (skel)…", func() {
-			runToolCommand(
-				"Update /etc/skel",
-				[]string{"tools", "skel"},
-				"Create /etc/skel based on the current user's configurations?",
-			)
+			setExplanation("Update /etc/skel (eggs tools skel): Create /etc/skel based on current user's configurations.")
+			skelAction()
 		}),
 	)
 	helpMenu := fyne.NewMenu("Help",
@@ -433,30 +560,133 @@ func main() {
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("About", func() {
 			aboutText := fmt.Sprintf(
-				"Penguins GUI\n\n"+
+				"Penguins GUI %s\n\n"+
 					"Desktop interface for Penguins' Eggs.\n\n"+
+					"Author: %s\n\n"+
 					"Eggs: %s\n\n"+
 					"Homepage: https://penguins-eggs.net",
+				getGUIVersion(),
+				author,
 				eggsVersion,
 			)
 			dialog.ShowInformation("About Penguins GUI", aboutText, w)
 		}),
 	)
-	w.SetMainMenu(fyne.NewMainMenu(fileMenu, editMenu, toolsMenu, helpMenu))
+	var applyFontScale func(float32)
 
-	header := container.NewVBox(
-		widget.NewLabelWithStyle("Create an ISO of the running system", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		status,
+	presetItems := make([]*fyne.MenuItem, len(scalePresets))
+	for i, preset := range scalePresets {
+		p := preset
+		item := fyne.NewMenuItem(p.Label, func() {
+			applyFontScale(p.Scale)
+		})
+		item.Checked = (math.Abs(float64(currentScale-p.Scale)) < 0.05)
+		presetItems[i] = item
+	}
+
+	applyFontScale = func(newScale float32) {
+		newScale = clampScale(newScale)
+		if math.Abs(float64(newScale-currentScale)) < 0.01 {
+			return
+		}
+		currentScale = newScale
+		a.Preferences().SetFloat(preferenceFontScale, float64(newScale))
+		a.Settings().SetTheme(newScaledTheme(theme.DefaultTheme(), newScale))
+
+		for i, preset := range scalePresets {
+			presetItems[i].Checked = (math.Abs(float64(currentScale-preset.Scale)) < 0.05)
+		}
+		if w.MainMenu() != nil {
+			w.MainMenu().Refresh()
+		}
+
+		fyne.Do(func() {
+			min := w.Content().MinSize()
+			curr := w.Canvas().Size()
+			newW := curr.Width
+			newH := curr.Height
+			if min.Width > newW {
+				newW = min.Width
+			}
+			if min.Height > newH {
+				newH = min.Height
+			}
+			if newW != curr.Width || newH != curr.Height {
+				w.Resize(fyne.NewSize(newW, newH))
+			}
+		})
+	}
+
+	zoomIn := func() {
+		applyFontScale(currentScale + scaleStep)
+	}
+	zoomOut := func() {
+		applyFontScale(currentScale - scaleStep)
+	}
+	resetZoom := func() {
+		applyFontScale(defaultScale)
+	}
+
+	zoomInItem := fyne.NewMenuItem("Zoom In (Ctrl++)", zoomIn)
+	zoomOutItem := fyne.NewMenuItem("Zoom Out (Ctrl+-)", zoomOut)
+	resetZoomItem := fyne.NewMenuItem("Reset Zoom (Ctrl+0)", resetZoom)
+
+	viewMenuItems := []*fyne.MenuItem{
+		zoomInItem,
+		zoomOutItem,
+		resetZoomItem,
+		fyne.NewMenuItemSeparator(),
+	}
+	viewMenuItems = append(viewMenuItems, presetItems...)
+	viewMenu := fyne.NewMenu("View", viewMenuItems...)
+
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{
+		KeyName:  fyne.KeyPlus,
+		Modifier: fyne.KeyModifierShortcutDefault,
+	}, func(_ fyne.Shortcut) {
+		zoomIn()
+	})
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{
+		KeyName:  fyne.KeyEqual,
+		Modifier: fyne.KeyModifierShortcutDefault,
+	}, func(_ fyne.Shortcut) {
+		zoomIn()
+	})
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{
+		KeyName:  fyne.KeyMinus,
+		Modifier: fyne.KeyModifierShortcutDefault,
+	}, func(_ fyne.Shortcut) {
+		zoomOut()
+	})
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{
+		KeyName:  fyne.Key0,
+		Modifier: fyne.KeyModifierShortcutDefault,
+	}, func(_ fyne.Shortcut) {
+		resetZoom()
+	})
+
+	w.SetMainMenu(fyne.NewMainMenu(fileMenu, editMenu, viewMenu, toolsMenu, helpMenu))
+
+	toolbarRow := container.NewHBox(
+		tbCreateISO,
+		widget.NewSeparator(),
+		tbKill,
+		tbClean,
+		tbGrub,
+		widget.NewSeparator(),
+		tbDocs,
+	)
+
+	toolbarBox := container.NewVBox(
+		toolbarRow,
+		container.NewBorder(nil, nil, widget.NewIcon(theme.InfoIcon()), nil, explanationLabel),
 		widget.NewSeparator(),
 	)
 
-	form := container.NewVBox(
+	controls := container.NewVBox(
 		widget.NewLabelWithStyle("Mode", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		mode,
 		modeHelp,
-		widget.NewLabelWithStyle("Working directory", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		container.NewBorder(nil, nil, nil, browse, pathEntry),
-		container.NewHBox(layout.NewSpacer(), start),
 		widget.NewSeparator(),
 		widget.NewLabelWithStyle("Log", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 	)
@@ -466,7 +696,7 @@ func main() {
 		result,
 		container.NewHBox(layout.NewSpacer(), howToBoot, openFolder),
 	)
-	w.SetContent(container.NewBorder(container.NewVBox(header, form), footer, nil, nil, logScroll))
+	w.SetContent(container.NewBorder(container.NewVBox(toolbarBox, controls), footer, nil, nil, logScroll))
 	w.ShowAndRun()
 }
 

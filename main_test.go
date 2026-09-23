@@ -15,3 +15,14 @@ func TestStripANSI(t *testing.T) {
 		t.Fatalf("stripANSI() = %q, want %q", got, want)
 	}
 }
+
+func TestGUIVersionAndAuthor(t *testing.T) {
+	if got := getGUIVersion(); got == "" {
+		t.Fatalf("expected non-empty GUI version")
+	}
+	expectedAuthor := "Piero Proietti <piero.proietti@gmail.com>"
+	if author != expectedAuthor {
+		t.Fatalf("author = %q, want %q", author, expectedAuthor)
+	}
+}
+

@@ -5,9 +5,13 @@
 ### 🐧 Desktop Interface & Menus
 
 * **File Menu**: Added "Create ISO" to the File menu, replicating the main interface button and synchronizing its availability and busy state.
-* **Application Menus**: Added Edit (delete previous ISOs via `eggs kill`), Tools (`clean`, `grub40`, `repo`, `skel`), and Help (booting/testing guide, documentation link, and about dialog).
+* **Application Menus**: Added Edit (compact "Kill…" command for `eggs kill`), Tools (`clean`, `grub40`, `repo`, `skel`), and Help (booting/testing guide, documentation link, and about dialog).
 * **PolicyKit Rules & Window Icon**: Added `49-penguins-gui.rules` for privileged execution and customized window branding.
 * **GUI Authentication & Encryption Dialogs**: Replaced terminal prompts with native GUI dialogs for administrator authentication during system clones and LUKS passphrase configuration for encrypted clones.
+* **View Menu & Font Zoom**: Added a View menu and keyboard shortcuts (`Ctrl +`, `Ctrl -`, `Ctrl 0`) with presets (85% to 200%) to scale UI fonts dynamically and persist the choice in user preferences. The initial window size now scales proportionally.
+* **Action Toolbar & Interactive Explanations**: Added a quick action toolbar (Create ISO, Kill, Clean, GRUB, Docs) with an interactive explanation banner that displays detailed command information on hover and upon selection from menus or toolbar buttons.
+* **About Dialog Metadata**: Updated Help -> About to display the penguins-gui application version and credit author Piero Proietti <piero.proietti@gmail.com>.
+* **Streamlined Main Window Layout**: Cleaned up the main window by removing redundant header text, Eggs version string, working directory selector (defaulting to /home/eggs), and duplicate inline Create ISO button, delegating primary actions to the toolbar and menus.
 
 ### 📦 Packaging & CI
 
