@@ -1,4 +1,4 @@
-// Command package builds the Debian archive without starting the GUI.
+// Command package builds the native Linux archive without starting the GUI.
 package main
 
 import (

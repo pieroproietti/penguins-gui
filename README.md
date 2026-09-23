@@ -78,7 +78,7 @@ command is elevated, through sudo or polkit.
 - Closing the window is blocked while an operation is running; supervised cancellation is not yet available.
 - The command shown in the log is informational and does not shell-escape paths;
   execution itself uses Go's argument-safe `exec.Command`, not a shell.
-- Packaging and desktop integration are currently provided only for Debian.
+- Native packaging currently supports Debian and Arch Linux families.
 
 ## Architectural rule
 
@@ -89,16 +89,19 @@ penguins-gui -> eggs -> coa -> oa
 Eggs remains fully usable without the GUI, and the GUI only consumes the public
 command-line interface.
 
-## Debian package
+## Native packages (Debian and Arch)
 
-On Colibri/Debian, run as a normal user (no sudo):
+On Debian/Ubuntu/Devuan or Arch/Manjaro, run as a normal user (no sudo):
 
 ```bash
 make build
 make package
 ```
 
-Packaging requires Git, `dpkg-dev` (including `dpkg-shlibdeps`) and the Fyne
+The builder detects the package family from `/etc/os-release` (`ID`, then
+`ID_LIKE`). Unsupported distributions produce an explicit error.
+
+On Debian, packaging requires Git, `dpkg-dev` (including `dpkg-shlibdeps`) and the Fyne
 build dependencies. `make package` rebuilds the GUI and writes a native `.deb`
 to `dist/`. Cross-compilation is not supported by this packaging workflow.
 The standalone Go builder uses only the standard library and has no dependency
@@ -108,8 +111,8 @@ are adapted from Tailor's `pkg/builder`.
 The package installs `/usr/bin/penguins-gui`, its desktop launcher and a scalable
 SVG icon. Shared-library dependencies are calculated from the compiled binary
 with `dpkg-shlibdeps`; `penguins-eggs`, `pkexec` and `xdg-utils` are also required
-for the commands the GUI invokes. Clone authentication dialogs additionally
-require `sudo`.
+for the commands the GUI invokes. `sudo` is also a package dependency for clone
+authentication dialogs.
 
 Versioning follows Tailor: the nearest Git tag loses its leading `v`, and `-`
 and `_` become dots. The Debian revision is the number of commits reachable
@@ -117,7 +120,27 @@ from HEAD but not from any tag, with zero replaced by one. Without tags, the
 base version is `0.1.0` and the revision is the total HEAD commit count (or one
 if Git cannot supply it). Uncommitted changes do not alter the version.
 
-Inspect the archive before installing it:
+On Arch, install the build prerequisites:
+
+```bash
+sudo pacman -S --needed base-devel go git pkgconf libglvnd libx11 libxcursor libxrandr libxinerama libxi libxxf86vm libxkbcommon
+make package
+pacman -Qip dist/*.pkg.tar.zst
+pacman -Qlp dist/*.pkg.tar.zst
+```
+
+Arch packaging uses a generated [PKGBUILD](https://man.archlinux.org/man/PKGBUILD.5.en)
+and `makepkg`, producing `dist/penguins-gui-VERSION-REVISION-ARCH.pkg.tar.zst`.
+As in Tailor, the recipe packages the staged native binary and desktop assets.
+Runtime dependencies are recorded in the archive and checked by pacman at
+installation; they need not be installed on the build host.
+The shared staging step and separate distribution packagers allow additional
+formats to be added later. The Git version rules apply to both formats.
+
+`./m` cleans, builds and installs the native package with `sudo pacman -U`
+or `sudo dpkg -i`, following Tailor's convenience script.
+
+Inspect the Debian archive before installing it:
 
 ```bash
 dpkg-deb --info dist/*.deb
@@ -125,7 +148,7 @@ dpkg-deb --contents dist/*.deb
 ```
 
 `make clean` removes the built binary and `dist/`. There is no `make install`;
-installation is left to Debian's package manager, separately from building.
+`make package` only builds; `./m` also installs through the native package manager.
 
 ## Automated packages
 
@@ -134,13 +157,14 @@ The [Hammers workflow](.github/workflows/hammers.yml), adapted from
 runs on pushes and pull requests to `main`, on version tags, and can also be started manually
 from GitHub Actions. It tests and builds a native amd64 `.deb` package in a Debian
 Bookworm container, compatible with Debian (Bookworm and Trixie), Devuan, and Ubuntu,
-using the Go version declared in `go.mod`.
+using the Go version declared in `go.mod`. A separate Arch Linux job builds
+and inspects the native x86_64 `.pkg.tar.zst` package.
 Tests and packaging run as an unprivileged user; Fyne tests use a virtual display.
 
-Download the package from the run's **Artifacts** section (`penguins-gui-debian-amd64`).
+Download the package from the run's **Artifacts** section (`penguins-gui-debian-amd64` or `penguins-gui-arch-x86_64`).
 Artifacts are retained for seven days. The workflow inspects package metadata and
 contents; it does not install the package, since its `penguins-eggs` dependency
 is not provided by the standard Debian repositories.
 
 Version tags (`v*`) also publish a GitHub Release after the build succeeds, with
-the Debian package and SHA256 checksums attached for permanent download.
+both native packages and SHA256 checksums attached for permanent download.

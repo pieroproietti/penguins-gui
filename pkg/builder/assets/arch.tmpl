@@ -1,0 +1,16 @@
+# Maintainer: Piero Proietti <piero.proietti@gmail.com>
+pkgname=penguins-gui
+pkgver={{.BaseVersion}}
+pkgrel={{.Rel}}
+pkgdesc="Desktop interface for Penguins' Eggs"
+arch=('{{.Arch}}')
+url="https://github.com/pieroproietti/penguins-gui"
+options=('!debug')
+depends=('glibc' 'libglvnd' 'libx11' 'libxrandr' 'libxxf86vm'
+         'libxi' 'libxcursor' 'libxinerama'
+         'penguins-eggs' 'polkit' 'sudo' 'xdg-utils')
+
+package() {
+    mkdir -p "${pkgdir}/usr"
+    cp -a "${startdir}/usr/." "${pkgdir}/usr/"
+}

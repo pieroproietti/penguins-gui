@@ -75,10 +75,71 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  hammer-arch:
+    name: Arch (x86_64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: archlinux:base-devel
+    defaults:
+      run:
+        shell: bash
+    env:
+      CGO_ENABLED: "1"
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            ca-certificates git go pkgconf libglvnd libx11 libxcursor \
+            libxrandr libxinerama libxi libxxf86vm libxkbcommon \
+            xorg-server-xvfb xorg-xauth
+          useradd --create-home --shell /bin/bash artisan
+
+      - name: Check out source and version history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          # Build runs as artisan, with its own module and compilation caches.
+          cache: false
+
+      - name: Prepare unprivileged build
+        run: chown -R artisan:artisan "$GITHUB_WORKSPACE"
+
+      - name: Run tests
+        run: runuser -u artisan -- env PATH="$PATH" xvfb-run -a make test
+
+      - name: Build Arch package
+        run: runuser -u artisan -- env PATH="$PATH" make package
+
+      - name: Inspect Arch package
+        run: |
+          packages=(dist/*.pkg.tar.zst)
+          test "${#packages[@]}" -eq 1
+          test -f "${packages[0]}"
+          pacman -Qip "${packages[0]}"
+          pacman -Qlp "${packages[0]}"
+          bsdtar -xOf "${packages[0]}" .PKGINFO | grep -Fx 'pkgname = penguins-gui'
+          bsdtar -xOf "${packages[0]}" .PKGINFO | grep -Fx 'arch = x86_64'
+
+      - name: Upload Arch package
+        uses: actions/upload-artifact@v4
+        with:
+          name: penguins-gui-arch-x86_64
+          path: dist/*.pkg.tar.zst
+          if-no-files-found: error
+          retention-days: 7
+
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: hammer-build
+    needs: [hammer-build, hammer-arch]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -86,7 +147,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: penguins-gui-debian-amd64
+          pattern: penguins-gui-*
+          merge-multiple: true
           path: dist
       - name: Publish package and checksums
         env:
@@ -94,7 +156,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           cd dist
-          sha256sum ./*.deb > SHA256SUMS
-          gh release create "$RELEASE_TAG" ./*.deb SHA256SUMS \
+          sha256sum ./*.deb ./*.pkg.tar.zst > SHA256SUMS
+          gh release create "$RELEASE_TAG" ./*.deb ./*.pkg.tar.zst SHA256SUMS \
             --verify-tag --title "Penguins GUI $RELEASE_TAG" \
             --notes-file ../RELEASE_NOTES.md

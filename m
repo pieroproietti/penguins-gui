@@ -1,4 +1,20 @@
-rm dist/penguins-gui*
-make package
-sudo dpkg -i dist/penguins-gui*.deb
-
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")"
+make clean
+make package "$@"
+. /etc/os-release
+for family in "$ID" ${ID_LIKE:-}; do
+    case "$family" in
+        arch|manjaro)
+            sudo pacman -U dist/penguins-gui-*.pkg.tar.zst
+            exit
+            ;;
+        debian|ubuntu|devuan)
+            sudo dpkg -i dist/penguins-gui_*.deb
+            exit
+            ;;
+    esac
+done
+echo "Unsupported distribution: $ID" >&2
+exit 1
