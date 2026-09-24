@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+* **Edit menu**: Replaced its previous entries with the four setup actions and removed the Tools menu. Updated first-run guidance to point to Edit.
+
+* **grub40 button**: Renamed GRUB to grub40, with hover and click explanations describing ISO booting from disk without a USB drive.
+
+* **Tools menu**: Reduced to four concise entries: Install penguins-egg CLI, Install calamares, Update /etc/skel, Configure grub40.
+
+* **CLI setup entry**: Renamed the repository-and-install action to “Install penguins-eggs CLI” and added a startup warning directing users there when `eggs` is not found.
+
+* **Native repositories**: Added independent add/remove actions, using the native repository locations from Eggs without requiring the Eggs CLI.
+* **First-run setup**: Made Eggs optional in Debian, Arch and Fedora packages; automatically install Eggs after adding its native repository, with missing-Eggs guidance and automatic detection after setup.
+* **Calamares installation**: Added a Tools action to install Calamares and matching Qt 5/Qt 6 slideshow dependencies with native package managers, administrative authorization, live logs and error handling. Added simulated installation tests without modifying host packages.
 * **Fedora packaging**: Added native RPM generation, Fedora detection, installation through `./m`, and a Fedora 44 CI job with release artifacts and checksums.
 
 ## Release Notes: penguins-gui v26.9.23 - 2026-09-23

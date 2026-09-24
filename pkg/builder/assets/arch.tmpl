@@ -8,7 +8,8 @@ url="https://github.com/pieroproietti/penguins-gui"
 options=('!debug')
 depends=('glibc' 'libglvnd' 'libx11' 'libxrandr' 'libxxf86vm'
          'libxi' 'libxcursor' 'libxinerama'
-         'penguins-eggs' 'polkit' 'sudo' 'xdg-utils')
+         'polkit' 'sudo' 'xdg-utils' 'curl' 'gnupg')
+optdepends=('penguins-eggs: create live and cloned system images')
 
 package() {
     mkdir -p "${pkgdir}/usr"

@@ -12,7 +12,7 @@ internals and does not modify Penguins' Eggs.
 
 ## Current scope
 
-- Detect `eggs` in `PATH` and show its version in About.
+- Start without Eggs installed; warn when `eggs` is missing from `PATH` and point to **Edit → Install penguins-egg CLI**. Show its version in About when available.
 - Select one of the three existing remaster modes:
   - standard live;
   - system clone (`--clone`);
@@ -24,6 +24,9 @@ internals and does not modify Penguins' Eggs.
 - Find the newest ISO created directly in `/home/eggs`.
 - Open the ISO directory with `xdg-open`.
 - Run maintenance commands from menus and the action toolbar.
+- Configure the native Penguins' Eggs repository during CLI installation, without requiring Eggs.
+- Automatically install Penguins' Eggs after adding its repository and enable remaster actions without restarting.
+- Install Calamares and its Qt 5/Qt 6 slideshow dependencies from Edit.
 - Adjust font zoom and retain the preference between sessions.
 - Prevent closing the GUI while an operation is running.
 
@@ -39,7 +42,7 @@ for that stage.
 
 - Linux desktop
 - Go 1.25 or later
-- Penguins' Eggs installed and available as `eggs`
+- Penguins' Eggs installed and available as `eggs` for remastering (optional for setup)
 - polkit with `pkexec` when the GUI is not already running as root
 - `sudo` for the administrator-password dialogs used by clone modes
 - For graphical encrypted clones, an Eggs version supporting `EGGS_LUKS_PASSPHRASE`
@@ -47,6 +50,44 @@ for that stage.
 
 See the official Fyne documentation for the development packages required by
 your distribution: <https://docs.fyne.io/started/>.
+
+## Repository and Calamares setup
+
+Edit contains four actions: **Install penguins-egg CLI**, **Install calamares**,
+**Update /etc/skel**, and **Configure grub40**.
+
+Use **Edit → Install penguins-egg CLI** to configure the official Penguins' Eggs
+repository and signing keys directly, using the same repository locations as
+Eggs. This works before Eggs is installed.
+
+The GUI packages do not require `penguins-eggs`: it is an optional dependency.
+On a fresh system, install the GUI package and use **Edit → Install penguins-egg CLI**.
+After configuring the repository, the same operation automatically refreshes
+package metadata and installs Eggs; the GUI detects it again and enables ISO creation without a restart.
+If repository setup fails, installation does not start. If installation fails,
+fix the reported problem and repeat **Install penguins-egg CLI** to retry. On
+Arch/Manjaro this performs a full system upgrade with `pacman -Syu` to avoid a
+partial upgrade. Repository setup uses `curl` and, on Debian, `gpg`; packaged
+builds include these dependencies. When running a standalone binary, those tools
+must already be installed.
+
+Use **Edit → Install calamares** to install Calamares using the host
+package manager. The GUI then detects the installed Calamares Qt version with
+`ldd` and installs the matching QML/Quick Controls runtime packages. Supported
+families are Debian/Ubuntu (including Devuan), Arch, Fedora/RHEL, openSUSE and
+Alpine. Ubuntu also receives `language-selector-common`; Alpine receives the
+separate installer modules. Packages must be available in configured repositories.
+
+Setup actions require confirmation and administrative authorization and stream
+their output into the GUI log. Installation stops on the first error; packages
+already installed remain installed, and the action can be retried after fixing
+the cause. Installing packages does not launch Calamares or change the selected
+installer in Eggs configuration. Eggs continues to manage branding and installer
+configuration during remastering.
+
+The package lists follow the legacy Eggs installer, with Qt 6 equivalents from
+the distribution catalogs, including [Debian QML modules](https://packages.debian.org/sid/qml6-module-qtqml-workerscript)
+and [Alpine Qt Declarative](https://pkgs.alpinelinux.org/package/edge/community/x86/qt6-qtdeclarative).
 
 ## Run during development
 
@@ -76,8 +117,9 @@ command is elevated, through sudo or polkit.
 - The final artifact is discovered by scanning for a recently modified `.iso`
   directly in `/home/eggs`.
 - Closing the window is blocked while an operation is running; supervised cancellation is not yet available.
-- The command shown in the log is informational and does not shell-escape paths;
-  execution itself uses Go's argument-safe `exec.Command`, not a shell.
+- The command shown in the log is informational and does not shell-escape paths.
+  Eggs commands use Go's argument-safe `exec.Command`; repository and package setup
+  use embedded, fixed shell scripts with validated distribution/action arguments.
 - Native packaging currently supports Debian, Arch Linux and Fedora families.
 
 ## Architectural rule
@@ -153,7 +195,7 @@ Fedora packaging uses a generated RPM spec and `rpmbuild`, producing
 (the distribution suffix and architecture follow the build host; aarch64 is
 also supported). RPM detects shared-library dependencies from the binary;
 `penguins-eggs`, `polkit`, `sudo` and `xdg-utils` are explicit requirements.
-Penguins' Eggs must be installed or available from a configured repository.
+Penguins' Eggs is optional; adding its native repository in the GUI installs it automatically.
 Like the other formats, this packages a locally built binary and is intended
 for direct distribution, not submission to Fedora's official repositories.
 The RPM currently records `LicenseRef-Unknown` because this repository has no
@@ -186,8 +228,8 @@ Tests and packaging run as an unprivileged user; Fyne tests use a virtual displa
 
 Download the package from the run's **Artifacts** section (`penguins-gui-debian-amd64`, `penguins-gui-arch-x86_64` or `penguins-gui-fedora-x86_64`).
 Artifacts are retained for seven days. The workflow inspects package metadata and
-contents; it does not install the package, since its `penguins-eggs` dependency
-is not provided by the standard Debian repositories.
+contents; it does not install the package. Penguins' Eggs is optional and can be
+installed automatically when its native repository is configured through the GUI.
 
 Version tags (`v*`) also publish a GitHub Release after the build succeeds, with
 all three native packages and SHA256 checksums attached for permanent download.

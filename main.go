@@ -16,6 +16,7 @@ import (
 	"math"
 
 	"github.com/pieroproietti/penguins-gui/internal/tools/eggs"
+	"github.com/pieroproietti/penguins-gui/internal/tools/system"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -28,9 +29,10 @@ import (
 )
 
 const (
-	applicationID = "net.penguins-eggs.gui"
-	defaultNest   = "/home/eggs"
-	defaultAuthor = "Piero Proietti <piero.proietti@gmail.com>"
+	applicationID      = "net.penguins-eggs.gui"
+	defaultNest        = "/home/eggs"
+	defaultAuthor      = "Piero Proietti <piero.proietti@gmail.com>"
+	missingEggsMessage = "The eggs command was not found in PATH. Use Edit → Install penguins-egg CLI to configure the repository and install it. ISO creation will become available after installation."
 )
 
 //go:embed pkg/builder/assets/penguins-gui.svg
@@ -179,12 +181,7 @@ func main() {
 	tbQuit := newActionButton("Exit", theme.LogoutIcon(), quit,
 		func() { setExplanation("Close Penguins GUI after the current operation has finished.") }, resetExplanation)
 
-	runToolCommand := func(title string, args []string, confirmPrompt string) {
-		if detectErr != nil {
-			dialog.ShowError(errors.New("Penguins’ Eggs was not found in PATH"), w)
-			return
-		}
-
+	runCommand := func(title string, executable string, args []string, confirmPrompt string) {
 		busyMu.Lock()
 		if isBusy {
 			busyMu.Unlock()
@@ -195,6 +192,11 @@ func main() {
 
 		execute := func() {
 			busyMu.Lock()
+			if isBusy {
+				busyMu.Unlock()
+				dialog.ShowInformation("Busy", "Another operation is currently in progress.", w)
+				return
+			}
 			isBusy = true
 			busyMu.Unlock()
 
@@ -211,8 +213,10 @@ func main() {
 			logGrid.SetText("")
 
 			go func() {
-				err := eggsCLI.RunPrivileged(eggsPath, args, "", "", appendLog)
+				err := eggsCLI.RunPrivileged(executable, args, "", "", appendLog)
+				detectedPath, detectedVersion, detectedErr := eggsCLI.Detect()
 				fyne.Do(func() {
+					eggsPath, eggsVersion, detectErr = detectedPath, detectedVersion, detectedErr
 					busyMu.Lock()
 					isBusy = false
 					busyMu.Unlock()
@@ -241,6 +245,14 @@ func main() {
 		} else {
 			execute()
 		}
+	}
+
+	runToolCommand := func(title string, args []string, prompt string) {
+		if detectErr != nil {
+			dialog.ShowInformation("penguins-eggs CLI not found", missingEggsMessage, w)
+			return
+		}
+		runCommand(title, eggsPath, args, prompt)
 	}
 
 	needsSudoPassword := func() bool {
@@ -413,18 +425,33 @@ func main() {
 
 	grubAction := func() {
 		runToolCommand(
-			"Configure GRUB loopback",
+			"Configure grub40",
 			[]string{"tools", "grub40"},
-			"Generate GRUB configuration to boot ANY ISO via loopback?",
+			"Generate a GRUB boot menu entry to start an ISO stored on disk without using a USB drive?",
 		)
 	}
 
-	repoAction := func() {
-		runToolCommand(
-			"Manage repository",
-			[]string{"tools", "repo"},
-			"Add or remove the official penguins-eggs repository?",
-		)
+	repoAction := func(action string) {
+		title, prompt := "Install penguins-eggs CLI", "Add the official repository and signing keys, then automatically install Penguins’ Eggs?\n\nOn Arch/Manjaro this also performs the system upgrade required when refreshing package databases."
+		if action == "rm" {
+			title, prompt = "Remove native repository", "Remove the official Penguins’ Eggs repository? Shared RPM/Pacman signing keys will be retained."
+		}
+		executable, args, err := system.RepositoryCommand(action)
+		if err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+		runCommand(title, executable, args, prompt)
+	}
+
+	calamaresAction := func() {
+		executable, args, err := system.CalamaresCommand()
+		if err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+		runCommand("Install Calamares", executable, args,
+			"Install Calamares and the Qt/QML packages required by its slideshow?\n\nPackages will be downloaded from your configured repositories. If Calamares is unavailable, add the native Penguins’ Eggs repository first.")
 	}
 
 	skelAction := func() {
@@ -476,14 +503,14 @@ func main() {
 	)
 
 	tbGrub = newActionButton(
-		"GRUB",
+		"grub40",
 		theme.ComputerIcon(),
 		func() {
-			setExplanation("Configure GRUB loopback (eggs tools grub40): Generate GRUB config to boot ANY ISO via loopback.")
+			setExplanation("grub40: Generate a GRUB boot menu entry to start an ISO stored on disk without using a USB drive.")
 			grubAction()
 		},
 		func() {
-			setExplanation("Configure GRUB loopback (eggs tools grub40): Generate GRUB configuration to boot ANY ISO via loopback.")
+			setExplanation("grub40: Generate a GRUB boot menu entry to start an ISO stored on disk without using a USB drive.")
 		},
 		resetExplanation,
 	)
@@ -549,6 +576,7 @@ func main() {
 
 	if detectErr != nil {
 		setButtonsEnabled(false)
+		result.SetText(missingEggsMessage)
 	}
 
 	createISOMenuItem = fyne.NewMenuItem("Create ISO", func() {
@@ -565,31 +593,10 @@ func main() {
 		fyne.NewMenuItem("Quit", quit),
 	)
 	editMenu := fyne.NewMenu("Edit",
-		fyne.NewMenuItem("Copy log", copyLog),
-		fyne.NewMenuItem("Clear log", clearLog),
-		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Kill…", func() {
-			setExplanation("Kill (eggs kill): Delete previous ISOs and clean the build nest (/home/eggs).")
-			killAction()
-		}),
-	)
-	toolsMenu := fyne.NewMenu("Tools",
-		fyne.NewMenuItem("Clean system remnants (clean)…", func() {
-			setExplanation("Clean (eggs tools clean): Clean log rotation, package manager cache, and host system remnants.")
-			cleanAction()
-		}),
-		fyne.NewMenuItem("Configure GRUB loopback (grub40)…", func() {
-			setExplanation("Configure GRUB loopback (eggs tools grub40): Generate GRUB configuration to boot ANY ISO via loopback.")
-			grubAction()
-		}),
-		fyne.NewMenuItem("Manage repository (repo)…", func() {
-			setExplanation("Manage repository (eggs tools repo): Add or remove the official penguins-eggs repository.")
-			repoAction()
-		}),
-		fyne.NewMenuItem("Update /etc/skel (skel)…", func() {
-			setExplanation("Update /etc/skel (eggs tools skel): Create /etc/skel based on current user's configurations.")
-			skelAction()
-		}),
+		fyne.NewMenuItem("Install penguins-egg CLI", func() { repoAction("add") }),
+		fyne.NewMenuItem("Install calamares", calamaresAction),
+		fyne.NewMenuItem("Update /etc/skel", skelAction),
+		fyne.NewMenuItem("Configure grub40", grubAction),
 	)
 	helpMenu := fyne.NewMenu("Help",
 		fyne.NewMenuItem("Testing & Booting the ISO…", func() {
@@ -710,7 +717,7 @@ func main() {
 		resetZoom()
 	})
 
-	w.SetMainMenu(fyne.NewMainMenu(fileMenu, editMenu, viewMenu, toolsMenu, helpMenu))
+	w.SetMainMenu(fyne.NewMainMenu(fileMenu, editMenu, viewMenu, helpMenu))
 
 	toolbarActions := container.NewHBox(
 		tbCreateISO,
@@ -745,6 +752,14 @@ func main() {
 		container.NewHBox(layout.NewSpacer(), howToBoot, openFolder),
 	)
 	w.SetContent(container.NewPadded(container.NewBorder(container.NewVBox(toolbarBox, controls), footer, nil, nil, logScroll)))
+	if detectErr != nil {
+		message := widget.NewLabel(missingEggsMessage)
+		message.Wrapping = fyne.TextWrapWord
+		warning := dialog.NewCustom("penguins-eggs CLI not found", "OK", message, w)
+		warning.SetIcon(theme.WarningIcon())
+		warning.Resize(fyne.NewSize(480, 180))
+		warning.Show()
+	}
 	w.ShowAndRun()
 }
 
