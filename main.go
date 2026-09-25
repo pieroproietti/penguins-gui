@@ -53,6 +53,18 @@ func getGUIVersion() string {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == system.GRUBHelperArg {
+		if len(os.Args) != 4 {
+			fmt.Fprintln(os.Stderr, "Expected Eggs executable and ISO path")
+			os.Exit(1)
+		}
+		if err := system.ConfigureEggsGRUB(os.Args[2], os.Args[3]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println("ISO boot entry saved; previous marked Eggs entries replaced.")
+		return
+	}
 	a := app.NewWithID(applicationID)
 	a.SetIcon(appIcon)
 
@@ -77,6 +89,11 @@ func main() {
 
 	eggsCLI := eggs.CLIAdapter{}
 	eggsPath, eggsVersion, detectErr := eggsCLI.Detect()
+	grubBoot := system.DetectGRUBBoot()
+	grubExplanation := "Boot without USB: Add the ISO to this computer's startup menu so you can select it the next time you restart."
+	if !grubBoot.Detected {
+		grubExplanation = grubBoot.Reason
+	}
 
 	mode := widget.NewRadioGroup([]string{
 		string(eggs.ModeStandard),
@@ -125,6 +142,7 @@ func main() {
 	var isBusy bool
 	var busyMu sync.Mutex
 	var createISOMenuItem *fyne.MenuItem
+	var grubMenuItem *fyne.MenuItem
 	var tbCreateISO, tbKill, tbClean, tbGrub, tbDocs *actionButton
 	var setButtonsEnabled func(bool)
 
@@ -181,7 +199,7 @@ func main() {
 	tbQuit := newActionButton("Exit", theme.LogoutIcon(), quit,
 		func() { setExplanation("Close Penguins GUI after the current operation has finished.") }, resetExplanation)
 
-	runCommand := func(title string, executable string, args []string, confirmPrompt string) {
+	runCommand := func(title string, executable string, args []string, confirmPrompt string, successMessage string) {
 		busyMu.Lock()
 		if isBusy {
 			busyMu.Unlock()
@@ -229,8 +247,12 @@ func main() {
 						result.SetText(fmt.Sprintf("%s failed: %v", title, err))
 						dialog.ShowError(err, w)
 					} else {
-						result.SetText(fmt.Sprintf("%s completed successfully.", title))
-						dialog.ShowInformation(title, fmt.Sprintf("%s finished successfully.", title), w)
+						message := fmt.Sprintf("%s completed successfully.", title)
+						if successMessage != "" {
+							message = successMessage
+						}
+						result.SetText(message)
+						dialog.ShowInformation(title, message, w)
 					}
 				})
 			}()
@@ -247,12 +269,12 @@ func main() {
 		}
 	}
 
-	runToolCommand := func(title string, args []string, prompt string) {
+	runToolCommand := func(title string, args []string, prompt string, successMessage string) {
 		if detectErr != nil {
 			dialog.ShowInformation("penguins-eggs CLI not found", missingEggsMessage, w)
 			return
 		}
-		runCommand(title, eggsPath, args, prompt)
+		runCommand(title, eggsPath, args, prompt, successMessage)
 	}
 
 	needsSudoPassword := func() bool {
@@ -412,6 +434,7 @@ func main() {
 			"Kill (delete previous ISOs)",
 			[]string{"kill"},
 			"Delete previous ISOs and clean the build nest (/home/eggs)?",
+			"",
 		)
 	}
 
@@ -420,15 +443,57 @@ func main() {
 			"Clean system remnants",
 			[]string{"tools", "clean"},
 			"Clean log rotation, package manager cache, and host system remnants?",
+			"",
 		)
 	}
 
 	grubAction := func() {
-		runToolCommand(
-			"Configure grub40",
-			[]string{"tools", "grub40"},
-			"Generate a GRUB boot menu entry to start an ISO stored on disk without using a USB drive?",
-		)
+		if !grubBoot.Detected {
+			dialog.ShowInformation("Boot without USB", grubBoot.Reason, w)
+			return
+		}
+		entries, err := os.ReadDir(defaultNest)
+		if err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+		var names []string
+		for _, entry := range entries {
+			if !strings.EqualFold(filepath.Ext(entry.Name()), ".iso") {
+				continue
+			}
+			info, err := os.Stat(filepath.Join(defaultNest, entry.Name()))
+			if err == nil && info.Mode().IsRegular() {
+				names = append(names, entry.Name())
+			}
+		}
+		if len(names) == 0 {
+			dialog.ShowInformation("Boot without USB", "No ISO files found in "+defaultNest, w)
+			return
+		}
+		selection := widget.NewSelect(names, nil)
+		selection.SetSelected(names[0])
+		picker := dialog.NewForm("Select ISO from "+defaultNest, "Continue", "Cancel",
+			[]*widget.FormItem{widget.NewFormItem("ISO", selection)}, func(ok bool) {
+				if !ok || selection.Selected == "" {
+					return
+				}
+				isoPath := filepath.Join(defaultNest, selection.Selected)
+				executable, err := os.Executable()
+				if err != nil {
+					dialog.ShowError(err, w)
+					return
+				}
+				runCommand(
+					"Boot without USB",
+					executable,
+					[]string{system.GRUBHelperArg, eggsPath, isoPath},
+					fmt.Sprintf("Use this ISO in this computer's startup menu, replacing any previous Penguins' Eggs entries?\n\n%s\n\nAfter this operation, you must update GRUB before restarting to make the ISO available in the startup menu.", isoPath),
+					"ISO boot entry saved. Update GRUB before restarting.\n\nOn Debian/Ubuntu, run in a terminal:\nsudo update-grub\n\nOn other distributions, use the GRUB update command provided by your distribution. Then restart and select the ISO from the startup menu.",
+				)
+			}, w)
+		picker.Resize(fyne.NewSize(720, 180))
+		picker.Show()
 	}
 
 	repoAction := func(action string) {
@@ -441,7 +506,7 @@ func main() {
 			dialog.ShowError(err, w)
 			return
 		}
-		runCommand(title, executable, args, prompt)
+		runCommand(title, executable, args, prompt, "")
 	}
 
 	calamaresAction := func() {
@@ -451,7 +516,7 @@ func main() {
 			return
 		}
 		runCommand("Install Calamares", executable, args,
-			"Install Calamares and the Qt/QML packages required by its slideshow?\n\nPackages will be downloaded from your configured repositories. If Calamares is unavailable, add the native Penguins’ Eggs repository first.")
+			"Install Calamares and the Qt/QML packages required by its slideshow?\n\nPackages will be downloaded from your configured repositories. If Calamares is unavailable, add the native Penguins’ Eggs repository first.", "")
 	}
 
 	skelAction := func() {
@@ -459,6 +524,7 @@ func main() {
 			"Update /etc/skel",
 			[]string{"tools", "skel"},
 			"Create /etc/skel based on the current user's configurations?",
+			"",
 		)
 	}
 
@@ -503,14 +569,14 @@ func main() {
 	)
 
 	tbGrub = newActionButton(
-		"grub40",
+		"Boot without USB…",
 		theme.ComputerIcon(),
 		func() {
-			setExplanation("grub40: Generate a GRUB boot menu entry to start an ISO stored on disk without using a USB drive.")
+			setExplanation(grubExplanation)
 			grubAction()
 		},
 		func() {
-			setExplanation("grub40: Generate a GRUB boot menu entry to start an ISO stored on disk without using a USB drive.")
+			setExplanation(grubExplanation)
 		},
 		resetExplanation,
 	)
@@ -542,9 +608,6 @@ func main() {
 			if tbClean != nil {
 				tbClean.Enable()
 			}
-			if tbGrub != nil {
-				tbGrub.Enable()
-			}
 			if createISOMenuItem != nil {
 				createISOMenuItem.Disabled = false
 				if w.MainMenu() != nil {
@@ -562,15 +625,24 @@ func main() {
 			if tbClean != nil {
 				tbClean.Disable()
 			}
-			if tbGrub != nil {
-				tbGrub.Disable()
-			}
 			if createISOMenuItem != nil {
 				createISOMenuItem.Disabled = true
 				if w.MainMenu() != nil {
 					w.MainMenu().Refresh()
 				}
 			}
+		}
+		grubEnabled := enabled && detectErr == nil && grubBoot.Detected
+		if grubEnabled {
+			tbGrub.Enable()
+		} else {
+			tbGrub.Disable()
+		}
+		if grubMenuItem != nil {
+			grubMenuItem.Disabled = !grubEnabled
+		}
+		if w.MainMenu() != nil {
+			w.MainMenu().Refresh()
 		}
 	}
 
@@ -592,11 +664,13 @@ func main() {
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Quit", quit),
 	)
+	grubMenuItem = fyne.NewMenuItem("Boot without USB…", grubAction)
+	setButtonsEnabled(true)
 	editMenu := fyne.NewMenu("Edit",
 		fyne.NewMenuItem("Install penguins-egg CLI", func() { repoAction("add") }),
 		fyne.NewMenuItem("Install calamares", calamaresAction),
 		fyne.NewMenuItem("Update /etc/skel", skelAction),
-		fyne.NewMenuItem("Configure grub40", grubAction),
+		grubMenuItem,
 	)
 	helpMenu := fyne.NewMenu("Help",
 		fyne.NewMenuItem("Testing & Booting the ISO…", func() {

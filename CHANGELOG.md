@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+* **GRUB duplicate entries**: Save the custom-menu backup without execute permissions so GRUB does not load its old ISO entries. Replacing an existing backup also removes its execute permissions.
+
+* **Single ISO boot entry**: Boot without USB replaces previous marked Eggs blocks with the selected ISO, preserving unrelated custom entries and saving a backup. Generate the new entry before writing and reject incomplete markers. ISO cleanup remains a manual Kill action.
+
+* **GRUB detection**: Check kernel/EFI boot information at startup and disable Boot without USB in the toolbar and menu when GRUB cannot be identified, with an explanation on hover. Keep this availability check after other operations finish.
+
+* **GRUB reminder**: Boot without USB now reminds users to update GRUB before restarting, both in the confirmation and after a successful operation, with `sudo update-grub` guidance for Debian/Ubuntu.
+
+* **Boot without USB**: Renamed the grub40 button and menu entry to “Boot without USB…” and clarified that the action adds the ISO to this computer's startup menu for a later restart.
+
 * **Edit menu**: Replaced its previous entries with the four setup actions and removed the Tools menu. Updated first-run guidance to point to Edit.
 
 * **grub40 button**: Renamed GRUB to grub40, with hover and click explanations describing ISO booting from disk without a USB drive.

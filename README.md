@@ -54,7 +54,20 @@ your distribution: <https://docs.fyne.io/started/>.
 ## Repository and Calamares setup
 
 Edit contains four actions: **Install penguins-egg CLI**, **Install calamares**,
-**Update /etc/skel**, and **Configure grub40**.
+**Update /etc/skel**, and **Boot without USB…**.
+
+**Boot without USB…** is enabled only when startup through GRUB is detected
+from the kernel's boot information or EFI LoaderInfo. If those details are
+unavailable or GRUB cannot be identified, the button and menu entry remain
+disabled; hover over the button for an explanation. Having GRUB installed
+alone is not sufficient. After adding an ISO, update GRUB before restarting.
+The selected ISO replaces all previous entries delimited by Penguins' Eggs
+markers in `/etc/grub.d/40_custom`, keeping one Eggs entry and preserving other
+content. The previous file is backed up as `40_custom.penguins-gui.bak` without
+execute permissions so GRUB does not load its old entries;
+incomplete or mismatched markers stop the operation without changing the file.
+ISO files are removed only when you choose **Kill**. Deleting an ISO does not
+automatically remove its boot entry.
 
 Use **Edit → Install penguins-egg CLI** to configure the official Penguins' Eggs
 repository and signing keys directly, using the same repository locations as
