@@ -274,9 +274,11 @@ jobs:
       image: opensuse/tumbleweed:latest
     defaults:
       run:
-        shell: bash
+        shell: /bin/bash --noprofile --norc -e -o pipefail {0}
     env:
       CGO_ENABLED: "1"
+      # Keep system tools available when setup-go prepends its toolchain paths.
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
     steps:
       - name: Install build dependencies
@@ -287,6 +289,7 @@ jobs:
             pkg-config libX11-devel libXcursor-devel libXrandr-devel \
             libXinerama-devel libXi-devel libXxf86vm-devel Mesa-libGL-devel \
             libxkbcommon-devel wayland-devel xorg-x11-server-Xvfb xauth xvfb-run
+          /bin/bash --version
           useradd --create-home --user-group --shell /bin/bash artisan
 
       - name: Check out source and version history
