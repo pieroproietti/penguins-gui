@@ -234,15 +234,17 @@ The [Hammers workflow](.github/workflows/hammers.yml), adapted from
 runs on pushes and pull requests to `main`, on version tags, and can also be started manually
 from GitHub Actions. It tests and builds a native amd64 `.deb` package in a Debian
 Bookworm container, compatible with Debian (Bookworm and Trixie), Devuan, and Ubuntu,
-using the Go version declared in `go.mod`. A separate Arch Linux job builds
-and inspects the native x86_64 `.pkg.tar.zst` package. A Fedora 44 job builds
+using the Go version declared in `go.mod`. Separate Arch Linux and Manjaro jobs build
+and inspect native x86_64 `.pkg.tar.zst` packages. The Manjaro job uses
+`manjarolinux/base:latest`; its archive has a `-manjaro.pkg.tar.zst` suffix to
+keep both packages distinct in releases. A Fedora 44 job builds
 and inspects the x86_64 RPM, including its runtime dependencies.
 Tests and packaging run as an unprivileged user; Fyne tests use a virtual display.
 
-Download the package from the run's **Artifacts** section (`penguins-gui-debian-amd64`, `penguins-gui-arch-x86_64` or `penguins-gui-fedora-x86_64`).
+Download the package from the run's **Artifacts** section (`penguins-gui-debian-amd64`, `penguins-gui-arch-x86_64`, `penguins-gui-manjaro-x86_64` or `penguins-gui-fedora-x86_64`).
 Artifacts are retained for seven days. The workflow inspects package metadata and
 contents; it does not install the package. Penguins' Eggs is optional and can be
 installed automatically when its native repository is configured through the GUI.
 
 Version tags (`v*`) also publish a GitHub Release after the build succeeds, with
-all three native packages and SHA256 checksums attached for permanent download.
+all four native packages and SHA256 checksums attached for permanent download.

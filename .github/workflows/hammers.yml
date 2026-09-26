@@ -136,6 +136,73 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  hammer-manjaro:
+    name: Manjaro (x86_64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: manjarolinux/base:latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      CGO_ENABLED: "1"
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel ca-certificates git go pkgconf libglvnd libx11 libxcursor \
+            libxrandr libxinerama libxi libxxf86vm libxkbcommon \
+            xorg-server-xvfb xorg-xauth
+          useradd --create-home --shell /bin/bash artisan
+
+      - name: Check out source and version history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          # Build runs as artisan, with its own module and compilation caches.
+          cache: false
+
+      - name: Prepare unprivileged build
+        run: chown -R artisan:artisan "$GITHUB_WORKSPACE"
+
+      - name: Run tests
+        run: runuser -u artisan -- env PATH="$PATH" xvfb-run -a make test
+
+      - name: Build Manjaro package
+        run: runuser -u artisan -- env PATH="$PATH" make package
+
+      - name: Inspect Manjaro package
+        run: |
+          packages=(dist/*.pkg.tar.zst)
+          test "${#packages[@]}" -eq 1
+          test -f "${packages[0]}"
+          pacman -Qip "${packages[0]}"
+          pacman -Qlp "${packages[0]}"
+          bsdtar -xOf "${packages[0]}" .PKGINFO | grep -Fx 'pkgname = penguins-gui'
+          bsdtar -xOf "${packages[0]}" .PKGINFO | grep -Fx 'arch = x86_64'
+
+      # Arch and Manjaro generate the same filename; keep both release assets.
+      - name: Name Manjaro release asset
+        run: |
+          packages=(dist/*.pkg.tar.zst)
+          mv "${packages[0]}" "${packages[0]%.pkg.tar.zst}-manjaro.pkg.tar.zst"
+
+      - name: Upload Manjaro package
+        uses: actions/upload-artifact@v4
+        with:
+          name: penguins-gui-manjaro-x86_64
+          path: dist/*.pkg.tar.zst
+          if-no-files-found: error
+          retention-days: 7
+
   hammer-fedora:
     name: Fedora 44 (x86_64)
     runs-on: ubuntu-24.04
@@ -202,7 +269,7 @@ jobs:
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [hammer-build, hammer-arch, hammer-fedora]
+    needs: [hammer-build, hammer-arch, hammer-manjaro, hammer-fedora]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
