@@ -284,6 +284,9 @@ jobs:
       - name: Install build dependencies
         shell: sh
         run: |
+          # Avoid HTTP metadata downloads rejected by the openSUSE CDN.
+          sed -i 's|http://|https://|g' /etc/zypp/repos.d/*.repo
+          zypper --non-interactive refresh
           zypper --non-interactive install --no-recommends \
             bash ca-certificates git make gcc rpm-build shadow util-linux \
             pkg-config libX11-devel libXcursor-devel libXrandr-devel \
