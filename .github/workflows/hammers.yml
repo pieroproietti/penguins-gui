@@ -280,9 +280,10 @@ jobs:
 
     steps:
       - name: Install build dependencies
+        shell: sh
         run: |
           zypper --non-interactive install --no-recommends \
-            ca-certificates git make gcc rpm-build shadow util-linux \
+            bash ca-certificates git make gcc rpm-build shadow util-linux \
             pkg-config libX11-devel libXcursor-devel libXrandr-devel \
             libXinerama-devel libXi-devel libXxf86vm-devel Mesa-libGL-devel \
             libxkbcommon-devel wayland-devel xorg-x11-server-Xvfb xauth xvfb-run
