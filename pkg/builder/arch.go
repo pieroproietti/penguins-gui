@@ -36,6 +36,8 @@ func familyFromRelease(release string) (string, error) {
 	}
 	for _, id := range strings.Fields(values["ID"] + " " + values["ID_LIKE"]) {
 		switch id {
+		case "opensuse", "opensuse-leap", "opensuse-tumbleweed", "opensuse-slowroll", "suse":
+			return "opensuse", nil
 		case "fedora":
 			return "fedora", nil
 		case "arch", "manjaro":

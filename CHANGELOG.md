@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add native openSUSE RPM packaging for Leap, Tumbleweed and Slowroll, zypper installation through `./m`, and a Tumbleweed CI artifact included in releases.
+
+## Unreleased
+
 * **GRUB duplicate entries**: Save the custom-menu backup without execute permissions so GRUB does not load its old ISO entries. Replacing an existing backup also removes its execute permissions.
 
 * **Single ISO boot entry**: Boot without USB replaces previous marked Eggs blocks with the selected ISO, preserving unrelated custom entries and saving a backup. Generate the new entry before writing and reject incomplete markers. ISO cleanup remains a manual Kill action.

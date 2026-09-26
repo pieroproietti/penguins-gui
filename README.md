@@ -133,7 +133,7 @@ command is elevated, through sudo or polkit.
 - The command shown in the log is informational and does not shell-escape paths.
   Eggs commands use Go's argument-safe `exec.Command`; repository and package setup
   use embedded, fixed shell scripts with validated distribution/action arguments.
-- Native packaging currently supports Debian, Arch Linux and Fedora families.
+- Native packaging currently supports Debian, Arch Linux, Fedora and openSUSE families.
 
 ## Architectural rule
 
@@ -144,9 +144,9 @@ penguins-gui -> eggs -> coa -> oa
 Eggs remains fully usable without the GUI, and the GUI only consumes the public
 command-line interface.
 
-## Native packages (Debian, Arch and Fedora)
+## Native packages (Debian, Arch, Fedora and openSUSE)
 
-On Debian/Ubuntu/Devuan, Arch/Manjaro or Fedora, run as a normal user (no sudo):
+On Debian/Ubuntu/Devuan, Arch/Manjaro, Fedora or openSUSE, run as a normal user (no sudo):
 
 ```bash
 make build
@@ -214,8 +214,28 @@ for direct distribution, not submission to Fedora's official repositories.
 The RPM currently records `LicenseRef-Unknown` because this repository has no
 declared license; replace it when the project license is established.
 
+On openSUSE Leap, Tumbleweed or Slowroll, install Go 1.25 or later and
+the native build prerequisites:
+
+```bash
+sudo zypper install go git make gcc rpm-build pkg-config libX11-devel libXcursor-devel libXrandr-devel libXinerama-devel libXi-devel libXxf86vm-devel Mesa-libGL-devel libxkbcommon-devel wayland-devel
+make package
+rpm -qip dist/*.rpm
+rpm -qlp dist/*.rpm
+rpm -qp --requires dist/*.rpm
+sudo zypper install ./dist/penguins-gui-*.rpm
+```
+
+openSUSE shares the RPM builder with Fedora and produces
+`dist/penguins-gui-VERSION-REVISION.opensuse.ARCH.rpm` (x86_64 or aarch64).
+The suffix keeps release assets distinct from Fedora. Build on the target
+distribution: this does not guarantee binary compatibility between Leap,
+Tumbleweed and Slowroll. Eggs remains optional.
+For GUI tests, install `xorg-x11-server-Xvfb xauth xvfb-run`, then run
+`xvfb-run -a make test`.
+
 `./m` cleans, builds and installs the native package with `sudo pacman -U`
-`sudo dpkg -i` or `sudo dnf install`, following Tailor's convenience script.
+`sudo dpkg -i`, `sudo dnf install` or `sudo zypper install`, following Tailor's convenience script.
 
 Inspect the Debian archive before installing it:
 
@@ -238,13 +258,14 @@ using the Go version declared in `go.mod`. Separate Arch Linux and Manjaro jobs 
 and inspect native x86_64 `.pkg.tar.zst` packages. The Manjaro job uses
 `manjarolinux/base:latest`; its archive has a `-manjaro.pkg.tar.zst` suffix to
 keep both packages distinct in releases. A Fedora 44 job builds
-and inspects the x86_64 RPM, including its runtime dependencies.
+and inspects the x86_64 RPM, including its runtime dependencies. An openSUSE
+Tumbleweed job does the same using `opensuse/tumbleweed:latest`.
 Tests and packaging run as an unprivileged user; Fyne tests use a virtual display.
 
-Download the package from the run's **Artifacts** section (`penguins-gui-debian-amd64`, `penguins-gui-arch-x86_64`, `penguins-gui-manjaro-x86_64` or `penguins-gui-fedora-x86_64`).
+Download the package from the run's **Artifacts** section (`penguins-gui-debian-amd64`, `penguins-gui-arch-x86_64`, `penguins-gui-manjaro-x86_64` `penguins-gui-fedora-x86_64` or `penguins-gui-opensuse-x86_64`).
 Artifacts are retained for seven days. The workflow inspects package metadata and
 contents; it does not install the package. Penguins' Eggs is optional and can be
 installed automatically when its native repository is configured through the GUI.
 
 Version tags (`v*`) also publish a GitHub Release after the build succeeds, with
-all four native packages and SHA256 checksums attached for permanent download.
+all five native packages and SHA256 checksums attached for permanent download.

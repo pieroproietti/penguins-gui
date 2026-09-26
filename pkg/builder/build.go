@@ -42,8 +42,8 @@ func Build(root string) (string, error) {
 	}
 	data := RecipeData{BaseVersion: base, Rel: revision}
 	switch family {
-	case "fedora":
-		return packageFedora(root, work, stage, dist, data)
+	case "fedora", "opensuse":
+		return packageRPM(root, work, stage, dist, data, family)
 	case "arch":
 		return packageArch(root, work, stage, dist, data)
 	case "debian":
