@@ -272,13 +272,14 @@ jobs:
     timeout-minutes: 30
     container:
       image: opensuse/tumbleweed:latest
+      env:
+        # The runner uses Docker's PATH when setup-go prepends toolchain paths.
+        PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     defaults:
       run:
         shell: /bin/bash --noprofile --norc -e -o pipefail {0}
     env:
       CGO_ENABLED: "1"
-      # Keep system tools available when setup-go prepends its toolchain paths.
-      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
     steps:
       - name: Install build dependencies
@@ -308,6 +309,13 @@ jobs:
           go-version-file: go.mod
           # Build runs as artisan, with its own module and compilation caches.
           cache: false
+
+      - name: Verify build tools after Go setup
+        run: |
+          printf 'PATH=%s\n' "$PATH"
+          for tool in chown runuser go; do
+            command -v "$tool"
+          done
 
       - name: Prepare unprivileged build
         run: chown -R artisan:artisan "$GITHUB_WORKSPACE"
