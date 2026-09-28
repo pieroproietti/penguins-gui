@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   hammer-build:
-    name: Debian (amd64)
+    name: Debian + AppImage (amd64)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     container:
@@ -30,7 +30,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            ca-certificates git build-essential pkg-config dpkg-dev \
+            ca-certificates curl file git build-essential pkg-config dpkg-dev \
             libgl1-mesa-dev xorg-dev libxkbcommon-dev \
             xvfb xauth
           useradd --create-home --shell /bin/bash artisan
@@ -66,6 +66,39 @@ jobs:
           dpkg-deb --contents "${packages[0]}"
           test "$(dpkg-deb --field "${packages[0]}" Package)" = penguins-gui
           test "$(dpkg-deb --field "${packages[0]}" Architecture)" = amd64
+
+      - name: Install linuxdeploy
+        run: |
+          curl --fail --location --retry 3 \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
+            -o /usr/local/bin/linuxdeploy
+          chmod 0755 /usr/local/bin/linuxdeploy
+
+      - name: Build AppImage
+        run: runuser -u artisan -- env PATH="$PATH" make appimage
+
+      - name: Inspect AppImage
+        run: |
+          packages=(dist/*.AppImage)
+          test "${#packages[@]}" -eq 1
+          test -x "${packages[0]}"
+          file "${packages[0]}"
+          image=$(realpath "${packages[0]}")
+          work=$(mktemp -d)
+          cd "$work"
+          "$image" --appimage-extract > /dev/null
+          test -x squashfs-root/AppRun
+          test -x squashfs-root/usr/bin/penguins-gui
+          test -f squashfs-root/penguins-gui.desktop
+          test -f squashfs-root/penguins-gui.svg
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: penguins-gui-appimage-x86_64
+          path: dist/*.AppImage
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload Debian package
         uses: actions/upload-artifact@v4
@@ -365,7 +398,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           cd dist
-          sha256sum ./*.deb ./*.pkg.tar.zst ./*.rpm > SHA256SUMS
-          gh release create "$RELEASE_TAG" ./*.deb ./*.pkg.tar.zst ./*.rpm SHA256SUMS \
+          sha256sum ./*.deb ./*.pkg.tar.zst ./*.rpm ./*.AppImage > SHA256SUMS
+          gh release create "$RELEASE_TAG" ./*.deb ./*.pkg.tar.zst ./*.rpm ./*.AppImage SHA256SUMS \
             --verify-tag --title "Penguins GUI $RELEASE_TAG" \
             --notes-file ../RELEASE_NOTES.md

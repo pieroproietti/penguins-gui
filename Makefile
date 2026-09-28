@@ -1,4 +1,4 @@
-.PHONY: build package clean run test tidy
+.PHONY: build package appimage clean run test tidy
 
 build:
 	@test "$$(id -u)" != 0 || { echo "Build as a normal user, without sudo."; exit 1; }
@@ -6,6 +6,9 @@ build:
 
 package: build
 	go run ./cmd/package
+
+appimage: build
+	go run ./cmd/appimage
 
 clean:
 	rm -f penguins-gui

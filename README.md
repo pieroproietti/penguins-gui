@@ -247,6 +247,37 @@ dpkg-deb --contents dist/*.deb
 `make clean` removes the built binary and `dist/`. There is no `make install`;
 `make package` only builds; `./m` also installs through the native package manager.
 
+## AppImage (x86_64)
+
+Install [linuxdeploy](https://github.com/linuxdeploy/linuxdeploy/releases)
+(the official AppImage includes its AppImage output plugin), then run as a normal user:
+
+```bash
+chmod +x /path/to/linuxdeploy-x86_64.AppImage
+LINUXDEPLOY=/path/to/linuxdeploy-x86_64.AppImage make appimage
+```
+
+If `linuxdeploy` is in `PATH`, simply run `make appimage`. The same Go/Fyne
+build prerequisites apply, plus `file`. The result is
+`dist/penguins-gui-VERSION-REVISION-x86_64.AppImage`, using the native package's
+Git version rules. Packaging works without FUSE, including in containers.
+
+```bash
+chmod +x penguins-gui-*.AppImage
+./penguins-gui-VERSION-REVISION-x86_64.AppImage
+# When FUSE is unavailable:
+APPIMAGE_EXTRACT_AND_RUN=1 ./penguins-gui-VERSION-REVISION-x86_64.AppImage
+```
+
+The AppImage bundles the GUI and libraries collected by linuxdeploy. It still
+requires a Linux desktop with compatible glibc and graphics drivers. Build on
+an older distribution to target newer ones: Hammer uses Debian Bookworm; a
+local build on a newer system may require newer glibc. This is not a musl build.
+Eggs remains optional until remastering; `pkexec`/polkit, `sudo`, `xdg-open`,
+`curl`, and `gpg` (for Debian repository setup) must be available on the host
+for the corresponding operations. Native package managers also remain host tools.
+The AppImage does not install polkit rules or system packages on launch.
+
 ## Automated packages
 
 The [Hammers workflow](.github/workflows/hammers.yml), adapted from
@@ -260,12 +291,14 @@ and inspect native x86_64 `.pkg.tar.zst` packages. The Manjaro job uses
 keep both packages distinct in releases. A Fedora 44 job builds
 and inspects the x86_64 RPM, including its runtime dependencies. An openSUSE
 Tumbleweed job does the same using `opensuse/tumbleweed:latest`.
+The Debian job also builds and inspects an x86_64 AppImage with linuxdeploy.
 Tests and packaging run as an unprivileged user; Fyne tests use a virtual display.
 
 Download the package from the run's **Artifacts** section (`penguins-gui-debian-amd64`, `penguins-gui-arch-x86_64`, `penguins-gui-manjaro-x86_64` `penguins-gui-fedora-x86_64` or `penguins-gui-opensuse-x86_64`).
+The AppImage is available as `penguins-gui-appimage-x86_64`.
 Artifacts are retained for seven days. The workflow inspects package metadata and
 contents; it does not install the package. Penguins' Eggs is optional and can be
 installed automatically when its native repository is configured through the GUI.
 
 Version tags (`v*`) also publish a GitHub Release after the build succeeds, with
-all five native packages and SHA256 checksums attached for permanent download.
+all five native packages, the AppImage and SHA256 checksums attached for permanent download.
