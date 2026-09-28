@@ -295,7 +295,8 @@ The Debian job also builds and inspects an x86_64 AppImage with linuxdeploy.
 Tests and packaging run as an unprivileged user; Fyne tests use a virtual display.
 
 Download the package from the run's **Artifacts** section (`penguins-gui-debian-amd64`, `penguins-gui-arch-x86_64`, `penguins-gui-manjaro-x86_64` `penguins-gui-fedora-x86_64` or `penguins-gui-opensuse-x86_64`).
-The AppImage is available as `penguins-gui-appimage-x86_64`.
+The AppImage is available directly as `penguins-gui-VERSION-REVISION-x86_64.AppImage`,
+without a ZIP wrapper. After downloading, make it executable with `chmod +x penguins-gui-*.AppImage`.
 Artifacts are retained for seven days. The workflow inspects package metadata and
 contents; it does not install the package. Penguins' Eggs is optional and can be
 installed automatically when its native repository is configured through the GUI.
