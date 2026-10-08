@@ -1,33 +1,27 @@
 # Changelog
 
-## Unreleased
+## Release Notes: penguins-gui v26.10.8 - 2026-10-08
 
-- Add native openSUSE RPM packaging for Leap, Tumbleweed and Slowroll, zypper installation through `./m`, and a Tumbleweed CI artifact included in releases.
+### 📦 Multi-Distribution Packaging & AppImage
 
-## Unreleased
+* **AppImage Packaging**: Added standalone AppImage build support via `make appimage` and integration in the Hammers packaging CI, publishing direct `.AppImage` release binaries.
+* **openSUSE RPM Packaging**: Added native RPM packaging for openSUSE Leap, Tumbleweed, and Slowroll, package installation via `./m`, and a dedicated openSUSE Tumbleweed CI job with release artifacts.
+* **Manjaro & Arch Packaging**: Added native Arch Linux packaging (`.pkg.tar.zst`), Manjaro packaging, and CI builds with release artifacts.
+* **Fedora RPM Packaging**: Added native RPM generation for Fedora, `./m` installer integration, and a Fedora 44 CI workflow producing release artifacts.
+* **Release Artifacts**: All distribution packages (`.deb`, `.pkg.tar.zst`, `.rpm`, `.AppImage`) and SHA256SUMS are now automatically built and attached to GitHub releases.
 
-* **GRUB duplicate entries**: Save the custom-menu backup without execute permissions so GRUB does not load its old ISO entries. Replacing an existing backup also removes its execute permissions.
+### 🐧 System Setup, Tools & Calamares
 
-* **Single ISO boot entry**: Boot without USB replaces previous marked Eggs blocks with the selected ISO, preserving unrelated custom entries and saving a backup. Generate the new entry before writing and reject incomplete markers. ISO cleanup remains a manual Kill action.
+* **Native Repositories & Eggs Setup**: Added independent actions to configure or remove native Penguins' Eggs repositories without requiring the CLI, plus automatic Eggs installation.
+* **First-Run Experience**: Made Eggs optional in desktop packages, adding guidance and detection when Eggs is not yet installed.
+* **Calamares Installation**: Added a dedicated tool action to install Calamares and matching Qt 5 / Qt 6 slideshow dependencies across supported distributions with administrative elevation and live logs.
+* **Menu Organization**: Streamlined menu actions to provide direct access to setup tools (Eggs CLI, Calamares, /etc/skel, grub40).
 
-* **GRUB detection**: Check kernel/EFI boot information at startup and disable Boot without USB in the toolbar and menu when GRUB cannot be identified, with an explanation on hover. Keep this availability check after other operations finish.
+### 🚀 Boot Without USB & GRUB Integration
 
-* **GRUB reminder**: Boot without USB now reminds users to update GRUB before restarting, both in the confirmation and after a successful operation, with `sudo update-grub` guidance for Debian/Ubuntu.
-
-* **Boot without USB**: Renamed the grub40 button and menu entry to “Boot without USB…” and clarified that the action adds the ISO to this computer's startup menu for a later restart.
-
-* **Edit menu**: Replaced its previous entries with the four setup actions and removed the Tools menu. Updated first-run guidance to point to Edit.
-
-* **grub40 button**: Renamed GRUB to grub40, with hover and click explanations describing ISO booting from disk without a USB drive.
-
-* **Tools menu**: Reduced to four concise entries: Install penguins-egg CLI, Install calamares, Update /etc/skel, Configure grub40.
-
-* **CLI setup entry**: Renamed the repository-and-install action to “Install penguins-eggs CLI” and added a startup warning directing users there when `eggs` is not found.
-
-* **Native repositories**: Added independent add/remove actions, using the native repository locations from Eggs without requiring the Eggs CLI.
-* **First-run setup**: Made Eggs optional in Debian, Arch and Fedora packages; automatically install Eggs after adding its native repository, with missing-Eggs guidance and automatic detection after setup.
-* **Calamares installation**: Added a Tools action to install Calamares and matching Qt 5/Qt 6 slideshow dependencies with native package managers, administrative authorization, live logs and error handling. Added simulated installation tests without modifying host packages.
-* **Fedora packaging**: Added native RPM generation, Fedora detection, installation through `./m`, and a Fedora 44 CI job with release artifacts and checksums.
+* **Boot Without USB**: Renamed grub40 integration to "Boot without USB…" to easily configure GRUB to boot created ISOs directly from disk.
+* **Safe GRUB Management**: Marked Eggs blocks are cleanly replaced with the selected ISO, generating non-executable backups to prevent stale duplicate entries.
+* **GRUB Detection & Reminders**: Automatically identifies GRUB availability on startup, disables the action with an explanation if unavailable, and reminds users to run `sudo update-grub` after configuration.
 
 ## Release Notes: penguins-gui v26.9.23 - 2026-09-23
 

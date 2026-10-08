@@ -1,40 +1,56 @@
-# Penguins GUI v26.9.23
+# Penguins GUI v26.10.8
 
-A compact desktop interface for creating Penguins' Eggs live images and clones,
-with live output and direct access to the resulting ISO folder.
+A modern desktop interface for creating Penguins' Eggs live images and clones,
+managing system installers and setup tools, and booting live ISOs directly from
+disk without a USB drive.
 
-This release adds graphical clone authentication and encrypted-clone configuration,
-maintenance menus, an action toolbar with contextual explanations, persistent font
-zoom, and Clear/Copy log controls. The Exit button and window-close action keep
-the interface open until the current operation finishes.
+## What's New in v26.10.8
 
-The Debian amd64 package includes a desktop launcher and icon. It is built on
-Debian Bookworm; Penguins' Eggs must already be available from its repository.
-Clone password dialogs also require sudo, and graphical encrypted clones require
-an Eggs version supporting `EGGS_LUKS_PASSPHRASE`.
+### 📦 Multi-Distribution Packaging & AppImage
+* **Standalone AppImage**: Direct portable AppImage binary (`.AppImage`) for modern 64-bit Linux distributions.
+* **openSUSE RPM Support**: Native RPM packages for openSUSE Leap, Tumbleweed, and Slowroll, with zypper integration in `./m` and openSUSE Tumbleweed CI builds.
+* **Manjaro & Arch Packages**: Native Arch Linux (`.pkg.tar.zst`) and dedicated Manjaro release packages built in CI.
+* **Fedora RPM Packages**: Native RPM packaging and CI workflow for Fedora 44.
+* **Unified Release Assets**: All packages (`.deb`, `.pkg.tar.zst`, `.rpm`, `.AppImage`) and SHA256SUMS are published automatically.
 
-Download the `.deb` and install it with:
+### 🐧 System Setup, Tools & Calamares
+* **Native Repository Management**: Configure or remove native Penguins' Eggs repositories directly from the GUI without requiring the CLI.
+* **Automatic Eggs Setup**: Easily install the `penguins-eggs` CLI on first run.
+* **Calamares Installation**: Direct action to install Calamares and matching Qt 5 / Qt 6 slideshow dependencies across supported distributions.
+* **Streamlined Menus**: Easy access to configuration tools (Eggs CLI, Calamares, /etc/skel, grub40).
 
+### 🚀 Boot Without USB & GRUB Integration
+* **Boot Without USB**: Configure GRUB to boot created ISOs directly from disk, eliminating the need to write to a physical USB drive.
+* **Safe GRUB Management**: Cleanly replaces Eggs boot entries and creates non-executable backups to prevent stale duplicate entries.
+* **Bootloader Availability**: Automatically detects GRUB availability on startup and provides guidance to update GRUB (`sudo update-grub`).
+
+## Installation
+
+### AppImage
 ```sh
-sudo apt install ./penguins-gui_26.9.23-1_amd64.deb
+chmod +x penguins-gui-26.10.8-1-x86_64.AppImage
+./penguins-gui-26.10.8-1-x86_64.AppImage
 ```
 
-Native Arch and Fedora packages are also built by the packaging workflow.
-On Fedora 44 x86_64, download the RPM and install it with:
-
+### Debian / Ubuntu / Devuan (.deb)
 ```sh
-sudo dnf install ./penguins-gui-26.9.23-1.fc44.x86_64.rpm
+sudo apt install ./penguins-gui_26.10.8-1_amd64.deb
 ```
 
-Penguins' Eggs must be installed or available from a configured repository.
-The RPM includes the desktop launcher, icon and polkit rule, and declares
-its runtime dependencies. Its license metadata is currently
-`LicenseRef-Unknown`, pending a declared project license.
+### Fedora (.rpm)
+```sh
+sudo dnf install ./penguins-gui-26.10.8-1.fc44.x86_64.rpm
+```
+
+### openSUSE (.rpm)
+```sh
+sudo zypper install ./penguins-gui-26.10.8-1.opensuse.x86_64.rpm
+```
+
+### Arch Linux / Manjaro (.pkg.tar.zst)
+```sh
+sudo pacman -U ./penguins-gui-26.10.8-1-x86_64.pkg.tar.zst
+```
 
 Run Penguins GUI as a normal desktop user. SHA256SUMS is provided alongside the
 packages for download verification.
-
-Known limitations: progress is textual, ISO discovery uses file timestamps, and
-operation cancellation is not yet available. Encrypted-mode secret handling is
-unchanged in this release: in the sudo path, the passphrase appears in the command
-arguments and GUI log. Do not share encrypted-mode logs containing secrets.
