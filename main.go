@@ -15,6 +15,7 @@ import (
 
 	"math"
 
+	"github.com/pieroproietti/penguins-gui/internal/tools/chef"
 	"github.com/pieroproietti/penguins-gui/internal/tools/eggs"
 	"github.com/pieroproietti/penguins-gui/internal/tools/system"
 
@@ -90,7 +91,7 @@ func main() {
 	eggsCLI := eggs.CLIAdapter{}
 	eggsPath, eggsVersion, detectErr := eggsCLI.Detect()
 	grubBoot := system.DetectGRUBBoot()
-	grubExplanation := "Boot without USB: Add the ISO to this computer's startup menu so you can select it the next time you restart."
+	grubExplanation := "Boot ISO: Add the ISO to this computer's startup menu so you can select it the next time you restart."
 	if !grubBoot.Detected {
 		grubExplanation = grubBoot.Reason
 	}
@@ -142,8 +143,9 @@ func main() {
 	var isBusy bool
 	var busyMu sync.Mutex
 	var createISOMenuItem *fyne.MenuItem
+	var cookMenuItem *fyne.MenuItem
 	var grubMenuItem *fyne.MenuItem
-	var tbCreateISO, tbKill, tbClean, tbGrub, tbDocs *actionButton
+	var tbCreateISO, tbKill, tbClean, tbCook, tbGrub, tbDocs *actionButton
 	var setButtonsEnabled func(bool)
 
 	const defaultExplanation = "Select or hover over an action to view its description."
@@ -447,9 +449,61 @@ func main() {
 		)
 	}
 
+	cookAction := func() {
+		busyMu.Lock()
+		if isBusy {
+			busyMu.Unlock()
+			dialog.ShowInformation("Busy", "Another operation is currently in progress. Please wait until it completes.", w)
+			return
+		}
+		busyMu.Unlock()
+
+		chefPath, err := exec.LookPath("chef")
+		if err != nil {
+			dialog.ShowInformation("penguins-chef CLI not found", "The chef command was not found in PATH.\nPlease install penguins-chef to use the Cook feature.", w)
+			return
+		}
+
+		chefRoot, err := chef.GetChefRoot()
+		if err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+
+		openPicker := func() {
+			showCookDialog(w, chefPath, chefRoot, runCommand, appendLog)
+		}
+
+		if chef.IsChefDirMissingOrEmpty(chefRoot) {
+			prog := widget.NewProgressBarInfinite()
+			msg := widget.NewLabel("The chef recipes directory (~/.chef) is missing or empty.\n\nDownloading recipes repository…")
+			msg.Wrapping = fyne.TextWrapWord
+			content := container.NewVBox(msg, prog)
+			d := dialog.NewCustomWithoutButtons("Downloading Chef Recipes", container.NewPadded(content), w)
+			d.SetIcon(theme.DownloadIcon())
+			d.Resize(fyne.NewSize(450, 160))
+			d.Show()
+
+			go func() {
+				err := chef.DownloadChef(chefRoot, appendLog)
+				fyne.Do(func() {
+					d.Hide()
+					if err != nil {
+						dialog.ShowError(fmt.Errorf("failed to download recipes: %w", err), w)
+						return
+					}
+					openPicker()
+				})
+			}()
+			return
+		}
+
+		openPicker()
+	}
+
 	grubAction := func() {
 		if !grubBoot.Detected {
-			dialog.ShowInformation("Boot without USB", grubBoot.Reason, w)
+			dialog.ShowInformation("Boot ISO", grubBoot.Reason, w)
 			return
 		}
 		entries, err := os.ReadDir(defaultNest)
@@ -468,7 +522,7 @@ func main() {
 			}
 		}
 		if len(names) == 0 {
-			dialog.ShowInformation("Boot without USB", "No ISO files found in "+defaultNest, w)
+			dialog.ShowInformation("Boot ISO", "No ISO files found in "+defaultNest, w)
 			return
 		}
 		selection := widget.NewSelect(names, nil)
@@ -485,7 +539,7 @@ func main() {
 					return
 				}
 				runCommand(
-					"Boot without USB",
+					"Boot ISO",
 					executable,
 					[]string{system.GRUBHelperArg, eggsPath, isoPath},
 					fmt.Sprintf("Use this ISO in this computer's startup menu, replacing any previous Penguins' Eggs entries?\n\n%s\n\nAfter this operation, you must update GRUB before restarting to make the ISO available in the startup menu.", isoPath),
@@ -568,8 +622,21 @@ func main() {
 		resetExplanation,
 	)
 
+	tbCook = newActionButton(
+		"Cook",
+		theme.ColorPaletteIcon(),
+		func() {
+			setExplanation("Cook (penguins-chef): Select and apply desktop and system recipes.")
+			cookAction()
+		},
+		func() {
+			setExplanation("Cook (penguins-chef): Select and apply configuration and desktop recipes.")
+		},
+		resetExplanation,
+	)
+
 	tbGrub = newActionButton(
-		"Boot without USB…",
+		"Boot ISO",
 		theme.ComputerIcon(),
 		func() {
 			setExplanation(grubExplanation)
@@ -632,6 +699,16 @@ func main() {
 				}
 			}
 		}
+		if tbCook != nil {
+			if enabled {
+				tbCook.Enable()
+			} else {
+				tbCook.Disable()
+			}
+		}
+		if cookMenuItem != nil {
+			cookMenuItem.Disabled = !enabled
+		}
 		grubEnabled := enabled && detectErr == nil && grubBoot.Detected
 		if grubEnabled {
 			tbGrub.Enable()
@@ -664,9 +741,12 @@ func main() {
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Quit", quit),
 	)
-	grubMenuItem = fyne.NewMenuItem("Boot without USB…", grubAction)
+	cookMenuItem = fyne.NewMenuItem("Cook…", cookAction)
+	grubMenuItem = fyne.NewMenuItem("Boot ISO…", grubAction)
 	setButtonsEnabled(true)
 	editMenu := fyne.NewMenu("Edit",
+		cookMenuItem,
+		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Install penguins-egg CLI", func() { repoAction("add") }),
 		fyne.NewMenuItem("Install calamares", calamaresAction),
 		fyne.NewMenuItem("Update /etc/skel", skelAction),
@@ -798,6 +878,7 @@ func main() {
 		widget.NewSeparator(),
 		tbKill,
 		tbClean,
+		tbCook,
 		tbGrub,
 		widget.NewSeparator(),
 		tbDocs,

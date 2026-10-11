@@ -35,3 +35,21 @@ func TestActionButtonHoverAndTap(t *testing.T) {
 		t.Errorf("expected tapped to be true")
 	}
 }
+
+func TestCookAndBootISOButtons(t *testing.T) {
+	test.NewApp()
+
+	btnClean := newActionButton("Clean", theme.ViewRefreshIcon(), func() {}, nil, nil)
+	btnCook := newActionButton("Cook", theme.ColorPaletteIcon(), func() {}, nil, nil)
+	btnBootISO := newActionButton("Boot ISO", theme.ComputerIcon(), func() {}, nil, nil)
+
+	if btnClean.Text != "Clean" {
+		t.Errorf("expected Clean button text, got %q", btnClean.Text)
+	}
+	if btnCook.Text != "Cook" {
+		t.Errorf("expected Cook button text, got %q", btnCook.Text)
+	}
+	if btnBootISO.Text != "Boot ISO" {
+		t.Errorf("expected Boot ISO button text, got %q", btnBootISO.Text)
+	}
+}
