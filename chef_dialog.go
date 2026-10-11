@@ -30,6 +30,17 @@ func showCookDialog(
 		dialog.ShowError(err, parent)
 		return
 	}
+
+	// Filtriamo via le categorie di basso livello (dm, de, costumes) per la GUI
+	var recipes []chef.RecipeItem
+	for _, r := range rawRecipes {
+		cat := strings.ToLower(r.Category)
+		if cat == "dm" || cat == "de" || cat == "costumes" {
+			continue
+		}
+		recipes = append(recipes, r)
+	}
+
 	if len(recipes) == 0 {
 		dialog.ShowInformation("No Recipes Found", "No recipes found in "+chefRoot+". Run Update Recipes or 'chef get' to download them.", parent)
 		return
