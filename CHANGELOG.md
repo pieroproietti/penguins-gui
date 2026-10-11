@@ -1,5 +1,24 @@
 # Changelog
 
+## Release Notes: penguins-gui v26.10.11 - 2026-10-11
+
+### 🍳 Penguins Chef Integration (Cook)
+
+* **Interactive Recipe Picker**: Added the "Cook…" action in the action toolbar and Edit menu, opening an interactive browser for Penguins Chef recipes.
+* **Full-Window Expanded View**: The recipe picker automatically expands to the edges of the parent window canvas, featuring window-style controls (minimize to compact size, maximize/restore, and close).
+* **Live Recipe Preview & Metadata**: Real-time YAML definition preview in a scrollable TextGrid, complete with recipe descriptions, file paths, and supported distribution profiles.
+* **Apply & Dry-Run Support**: Directly apply recipes or run `--dry-run` previews with live terminal output and execution logging.
+* **Automatic Recipes Update**: Update or initialize the local `~/.chef` recipe repository with a single click.
+* **Filtered Categories**: Excluded internal low-level recipe categories (`base`, `de`, `dm`, `costumes`) from the GUI for an intuitive user experience.
+
+### 🚀 Boot ISO Clarification
+
+* **Boot ISO Action**: Renamed the bootloader configuration action from "Boot without USB…" to "Boot ISO…" across toolbar buttons and menus for clearer user intent.
+
+### 📦 Packaging Updates
+
+* **Arch Linux / Manjaro**: Added `xorg-xrandr` dependency in packaging templates for full resolution and display handling.
+
 ## Release Notes: penguins-gui v26.10.8 - 2026-10-08
 
 ### 📦 Multi-Distribution Packaging & AppImage

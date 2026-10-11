@@ -1,55 +1,51 @@
-# Penguins GUI v26.10.8
+# Penguins GUI v26.10.11
 
 A modern desktop interface for creating Penguins' Eggs live images and clones,
-managing system installers and setup tools, and booting live ISOs directly from
-disk without a USB drive.
+cooking system recipes with Penguins Chef, managing system installers and setup tools,
+and booting live ISOs directly from disk without a USB drive.
 
-## What's New in v26.10.8
+## What's New in v26.10.11
 
-### 📦 Multi-Distribution Packaging & AppImage
-* **Standalone AppImage**: Direct portable AppImage binary (`.AppImage`) for modern 64-bit Linux distributions.
-* **openSUSE RPM Support**: Native RPM packages for openSUSE Leap, Tumbleweed, and Slowroll, with zypper integration in `./m` and openSUSE Tumbleweed CI builds.
-* **Manjaro & Arch Packages**: Native Arch Linux (`.pkg.tar.zst`) and dedicated Manjaro release packages built in CI.
-* **Fedora RPM Packages**: Native RPM packaging and CI workflow for Fedora 44.
-* **Unified Release Assets**: All packages (`.deb`, `.pkg.tar.zst`, `.rpm`, `.AppImage`) and SHA256SUMS are published automatically.
+### 🍳 Penguins Chef Integration (Cook)
+* **Interactive Recipe Picker**: New "Cook…" action in the toolbar and Edit menu to browse and apply Penguins Chef recipes.
+* **Full-Window Expanded View**: Recipe picker expands to the full window canvas with classic minimize, maximize/restore, and close controls.
+* **Live YAML Preview & Details**: Inspect recipe definitions, distribution profile support, and descriptions before running.
+* **Apply & Dry-Run**: Apply recipes directly or execute a dry run with live logging.
+* **Automatic Recipe Repository Updates**: Download and update `~/.chef` recipes repository directly from the GUI.
+* **Streamlined Categories**: Low-level recipes (`base`, `de`, `dm`, `costumes`) are filtered for a clean desktop experience.
 
-### 🐧 System Setup, Tools & Calamares
-* **Native Repository Management**: Configure or remove native Penguins' Eggs repositories directly from the GUI without requiring the CLI.
-* **Automatic Eggs Setup**: Easily install the `penguins-eggs` CLI on first run.
-* **Calamares Installation**: Direct action to install Calamares and matching Qt 5 / Qt 6 slideshow dependencies across supported distributions.
-* **Streamlined Menus**: Easy access to configuration tools (Eggs CLI, Calamares, /etc/skel, grub40).
+### 🚀 Boot ISO Clarification
+* **Renamed Action**: Renamed the bootloader integration action to "Boot ISO…" in the toolbar and menus for clearer user intent.
 
-### 🚀 Boot Without USB & GRUB Integration
-* **Boot Without USB**: Configure GRUB to boot created ISOs directly from disk, eliminating the need to write to a physical USB drive.
-* **Safe GRUB Management**: Cleanly replaces Eggs boot entries and creates non-executable backups to prevent stale duplicate entries.
-* **Bootloader Availability**: Automatically detects GRUB availability on startup and provides guidance to update GRUB (`sudo update-grub`).
+### 📦 Packaging Updates
+* **Arch Linux / Manjaro**: Added `xorg-xrandr` dependency in packaging templates for full resolution and display handling.
 
 ## Installation
 
 ### AppImage
 ```sh
-chmod +x penguins-gui-26.10.8-1-x86_64.AppImage
-./penguins-gui-26.10.8-1-x86_64.AppImage
+chmod +x penguins-gui-26.10.11-1-x86_64.AppImage
+./penguins-gui-26.10.11-1-x86_64.AppImage
 ```
 
 ### Debian / Ubuntu / Devuan (.deb)
 ```sh
-sudo apt install ./penguins-gui_26.10.8-1_amd64.deb
+sudo apt install ./penguins-gui_26.10.11-1_amd64.deb
 ```
 
 ### Fedora (.rpm)
 ```sh
-sudo dnf install ./penguins-gui-26.10.8-1.fc44.x86_64.rpm
+sudo dnf install ./penguins-gui-26.10.11-1.fc44.x86_64.rpm
 ```
 
 ### openSUSE (.rpm)
 ```sh
-sudo zypper install ./penguins-gui-26.10.8-1.opensuse.x86_64.rpm
+sudo zypper install ./penguins-gui-26.10.11-1.opensuse.x86_64.rpm
 ```
 
 ### Arch Linux / Manjaro (.pkg.tar.zst)
 ```sh
-sudo pacman -U ./penguins-gui-26.10.8-1-x86_64.pkg.tar.zst
+sudo pacman -U ./penguins-gui-26.10.11-1-x86_64.pkg.tar.zst
 ```
 
 Run Penguins GUI as a normal desktop user. SHA256SUMS is provided alongside the

@@ -42,7 +42,7 @@ var iconSVG []byte
 var (
 	appIcon           = fyne.NewStaticResource("penguins-gui.svg", iconSVG)
 	ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
-	guiVersion        = "v26.10.8"
+	guiVersion        = "v26.10.11"
 	author            = defaultAuthor
 )
 
@@ -50,7 +50,7 @@ func getGUIVersion() string {
 	if guiVersion != "" && guiVersion != "devel" {
 		return guiVersion
 	}
-	return "v26.10.8"
+	return "v26.10.11"
 }
 
 func main() {
