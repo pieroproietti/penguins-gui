@@ -25,17 +25,17 @@ func showCookDialog(
 	appendLog func(string),
 ) {
 	recipesDir := filepath.Join(chefRoot, "recipes")
-	recipes, err := chef.FindRecipes(recipesDir, chefRoot)
+	rawRecipes, err := chef.FindRecipes(recipesDir, chefRoot)
 	if err != nil {
 		dialog.ShowError(err, parent)
 		return
 	}
 
-	// Filtriamo via le categorie di basso livello (dm, de, costumes) per la GUI
+	// Filtriamo via le categorie di basso livello (base, dm, de, costumes) per la GUI
 	var recipes []chef.RecipeItem
 	for _, r := range rawRecipes {
 		cat := strings.ToLower(r.Category)
-		if cat == "dm" || cat == "de" || cat == "costumes" {
+		if cat == "base" || cat == "dm" || cat == "de" || cat == "costumes" {
 			continue
 		}
 		recipes = append(recipes, r)
@@ -358,6 +358,71 @@ func showCookDialog(
 	split := container.NewHSplit(leftPanel, rightPanel)
 	split.SetOffset(0.35)
 
+	const (
+		compactW = float32(860)
+		compactH = float32(600)
+	)
+
+	calcMax := func() (float32, float32) {
+		w, h := compactW, compactH
+		if parent != nil && parent.Canvas() != nil {
+			cSize := parent.Canvas().Size()
+			if cSize.Width-24 > compactW {
+				w = cSize.Width - 24
+			}
+			if cSize.Height-24 > compactH {
+				h = cSize.Height - 24
+			}
+		}
+		return w, h
+	}
+
+	isMaximized := true
+	var setCompact func()
+	var setMaximized func()
+
+	btnMin := widget.NewButtonWithIcon("", theme.WindowMinimizeIcon(), func() {
+		if setCompact != nil {
+			setCompact()
+		}
+	})
+	btnMin.Importance = widget.LowImportance
+
+	btnMax := widget.NewButtonWithIcon("", theme.ViewRestoreIcon(), func() {
+		if isMaximized {
+			if setCompact != nil {
+				setCompact()
+			}
+		} else {
+			if setMaximized != nil {
+				setMaximized()
+			}
+		}
+	})
+	btnMax.Importance = widget.LowImportance
+
+	btnCloseHeader := widget.NewButtonWithIcon("", theme.WindowCloseIcon(), func() {
+		if d != nil {
+			d.Hide()
+		}
+	})
+	btnCloseHeader.Importance = widget.LowImportance
+
+	titleBox := container.NewHBox(
+		widget.NewIcon(theme.ColorPaletteIcon()),
+		widget.NewLabelWithStyle("Penguins Chef — Recipe Picker", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+	)
+
+	topBar := container.NewVBox(
+		container.NewBorder(
+			nil,
+			nil,
+			titleBox,
+			container.NewHBox(btnMin, btnMax, btnCloseHeader),
+		),
+		widget.NewSeparator(),
+	)
+
 	bottomBar := container.NewBorder(
 		nil,
 		nil,
@@ -366,17 +431,30 @@ func showCookDialog(
 	)
 
 	mainLayout := container.NewBorder(
-		nil,
+		topBar,
 		bottomBar,
 		nil,
 		nil,
 		split,
 	)
-	mainLayout.Resize(fyne.NewSize(820, 560))
 
-	d = dialog.NewCustomWithoutButtons("Penguins Chef — Recipe Picker", mainLayout, parent)
-	d.SetIcon(theme.ColorPaletteIcon())
-	d.Resize(fyne.NewSize(840, 580))
+	d = dialog.NewCustomWithoutButtons("", mainLayout, parent)
+
+	setCompact = func() {
+		d.Resize(fyne.NewSize(compactW, compactH))
+		btnMax.SetIcon(theme.WindowMaximizeIcon())
+		isMaximized = false
+	}
+
+	setMaximized = func() {
+		mw, mh := calcMax()
+		d.Resize(fyne.NewSize(mw, mh))
+		btnMax.SetIcon(theme.ViewRestoreIcon())
+		isMaximized = true
+	}
+
+	initW, initH := calcMax()
+	d.Resize(fyne.NewSize(initW, initH))
 	d.Show()
 	tree.OpenAllBranches()
 }
