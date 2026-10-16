@@ -101,11 +101,12 @@ func main() {
 		string(eggs.ModeClone),
 		string(eggs.ModeEncrypted),
 	}, nil)
+	mode.Horizontal = true
 	mode.Required = true
 	mode.SetSelected(string(eggs.ModeStandard))
 
 	modeHelp := widget.NewLabel(modeDescription(eggs.ModeStandard))
-	modeHelp.Wrapping = fyne.TextWrapWord
+	modeHelp.Truncation = fyne.TextTruncateEllipsis
 	mode.OnChanged = func(selected string) {
 		modeHelp.SetText(modeDescription(eggs.RemasterMode(selected)))
 	}
@@ -885,20 +886,29 @@ func main() {
 	)
 	toolbarRow := container.NewBorder(nil, nil, toolbarActions, tbQuit, layout.NewSpacer())
 
-	toolbarBox := container.NewVBox(
-		toolbarRow,
-		container.NewBorder(nil, nil, widget.NewIcon(theme.InfoIcon()), nil, explanationLabel),
-		widget.NewSeparator(),
+	statusBar := container.NewBorder(nil, nil, widget.NewIcon(theme.InfoIcon()), nil, explanationLabel)
+
+	modeRow := container.NewBorder(
+		nil, nil,
+		container.NewHBox(
+			mode,
+			widget.NewSeparator(),
+		),
+		nil,
+		modeHelp,
 	)
 
-	controls := container.NewVBox(
-		widget.NewLabelWithStyle("Mode", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		mode,
-		modeHelp,
+	logHeader := container.NewBorder(nil, nil,
+		widget.NewLabelWithStyle("Operation log", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		container.NewHBox(tbClearLog, tbCopyLog), nil)
+
+	topControls := container.NewVBox(
+		toolbarRow,
+		statusBar,
 		widget.NewSeparator(),
-		container.NewBorder(nil, nil,
-			widget.NewLabelWithStyle("Operation log", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-			container.NewHBox(tbClearLog, tbCopyLog), nil),
+		modeRow,
+		widget.NewSeparator(),
+		logHeader,
 	)
 
 	footer := container.NewVBox(
@@ -906,7 +916,7 @@ func main() {
 		result,
 		container.NewHBox(layout.NewSpacer(), howToBoot, openFolder),
 	)
-	w.SetContent(container.NewPadded(container.NewBorder(container.NewVBox(toolbarBox, controls), footer, nil, nil, logScroll)))
+	w.SetContent(container.NewPadded(container.NewBorder(topControls, footer, nil, nil, logScroll)))
 	if detectErr != nil {
 		message := widget.NewLabel(missingEggsMessage)
 		message.Wrapping = fyne.TextWrapWord
