@@ -564,6 +564,16 @@ func main() {
 		runCommand(title, executable, args, prompt, "")
 	}
 
+	chefAction := func() {
+		executable, args, err := system.ChefCommand()
+		if err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+		runCommand("Install penguins-chef", executable, args,
+			"Install penguins-chef?\n\nPackages will be downloaded from your configured repositories. On Arch/Manjaro this also performs the system upgrade required when refreshing package databases. If penguins-chef is unavailable, add the native Penguins’ Eggs repository first.", "")
+	}
+
 	calamaresAction := func() {
 		executable, args, err := system.CalamaresCommand()
 		if err != nil {
@@ -749,6 +759,7 @@ func main() {
 		cookMenuItem,
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Install penguins-egg CLI", func() { repoAction("add") }),
+		fyne.NewMenuItem("Install penguins-chef", chefAction),
 		fyne.NewMenuItem("Install calamares", calamaresAction),
 		fyne.NewMenuItem("Update /etc/skel", skelAction),
 		grubMenuItem,

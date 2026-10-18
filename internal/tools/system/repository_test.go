@@ -149,6 +149,25 @@ func TestEggsInstallWithoutEggs(t *testing.T) {
 	}
 }
 
+func TestChefInstall(t *testing.T) {
+	for _, family := range []string{"debian", "ubuntu", "arch", "manjaro", "fedora", "el9", "suse", "alpine"} {
+		t.Run(family, func(t *testing.T) {
+			root := t.TempDir()
+			for _, name := range []string{"apt-get", "pacman", "dnf", "zypper", "apk"} {
+				if err := os.WriteFile(filepath.Join(root, name), []byte("#!/bin/sh\necho \"$*\"\n"), 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cmd := exec.Command("/bin/sh", "-c", chefInstallScript, "test", family)
+			cmd.Env = []string{"PATH=" + root}
+			out, err := cmd.CombinedOutput()
+			if err != nil || !strings.Contains(string(out), "penguins-chef") {
+				t.Fatalf("%v: %s", err, out)
+			}
+		})
+	}
+}
+
 func TestRepositorySetupAutomaticallyInstallsEggs(t *testing.T) {
 	for _, tc := range []struct {
 		name, action                                      string
