@@ -1,5 +1,21 @@
 # Changelog
 
+## Release Notes: penguins-gui v26.10.21 - 2026-10-21
+
+### 🖥️ Layout & Interface Improvements
+
+* **Refactored Mode Selector**: Converted remaster mode options to a sleek horizontal layout with subtle separators and compact ellipsis descriptions.
+* **Maximized Operation Log Area**: Reorganized header layout to maximize the visible operation log area, placing status bar and mode row neatly above a dedicated log control bar.
+
+### 🍳 Penguins Chef Management
+
+* **Install Penguins Chef**: Added an action in the Edit menu to directly install `penguins-chef` using the appropriate system package manager across supported distributions (APT, Pacman, DNF, Zypper).
+
+### ⚡ Performance & Streaming Improvements
+
+* **Throttled Log UI Updates**: Batched UI log updates with an 80ms throttle window and buffered up to 1000 lines to ensure a fluid desktop experience during heavy output.
+* **Carriage Return (`\r`) Handling**: Added specialized stream scanner supporting both `\n` and `\r` (including `\r\n`), ensuring live CLI progress bars and terminal updates stream smoothly.
+
 ## Release Notes: penguins-gui v26.10.11 - 2026-10-11
 
 ### 🍳 Penguins Chef Integration (Cook)
