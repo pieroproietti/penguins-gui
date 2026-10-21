@@ -1,9 +1,11 @@
 package eggs
 
 import (
+	"bufio"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -62,5 +64,32 @@ func TestNewestISO(t *testing.T) {
 	}
 	if got.Size != int64(len("new iso")) {
 		t.Fatalf("(CLIAdapter{}).NewestISO() size = %d", got.Size)
+	}
+}
+
+func TestScanLinesOrCR(t *testing.T) {
+	input := "Line 1\nLine 2\r\nProgress 10%\rProgress 20%\rProgress 100%\nFinal line"
+	scanner := bufio.NewScanner(strings.NewReader(input))
+	scanner.Split(scanLinesOrCR)
+
+	var got []string
+	for scanner.Scan() {
+		got = append(got, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scanner error: %v", err)
+	}
+
+	want := []string{
+		"Line 1",
+		"Line 2",
+		"Progress 10%",
+		"Progress 20%",
+		"Progress 100%",
+		"Final line",
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("scanLinesOrCR got %#v, want %#v", got, want)
 	}
 }

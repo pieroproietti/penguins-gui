@@ -113,18 +113,56 @@ func (CLIAdapter) RunPrivileged(eggsPath string, args []string, adminPassword, l
 
 	var readers sync.WaitGroup
 	readers.Add(2)
-	stream := func(scanner *bufio.Scanner) {
+	stream := func(r io.Reader) {
 		defer readers.Done()
+		scanner := bufio.NewScanner(r)
+		scanner.Split(scanLinesOrCR)
+		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 		for scanner.Scan() {
 			appendLog(scanner.Text() + "\n")
 		}
 	}
-	go stream(bufio.NewScanner(stdout))
-	go stream(bufio.NewScanner(stderr))
+	go stream(stdout)
+	go stream(stderr)
 
-	waitErr := cmd.Wait()
 	readers.Wait()
+	waitErr := cmd.Wait()
 	return waitErr
+}
+
+// scanLinesOrCR is a bufio.SplitFunc that splits on either '\n' or '\r'.
+// It correctly handles CRLF ("\r\n") as a single line break.
+func scanLinesOrCR(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+
+	for i, b := range data {
+		if b == '\r' {
+			if i+1 < len(data) {
+				if data[i+1] == '\n' {
+					return i + 2, data[:i], nil
+				}
+				return i + 1, data[:i], nil
+			}
+			if atEOF {
+				return i + 1, data[:i], nil
+			}
+			// Request more data to see if '\n' follows.
+			return 0, nil, nil
+		}
+		if b == '\n' {
+			return i + 1, data[:i], nil
+		}
+	}
+
+	// If we're at EOF, we have a final, non-terminated line. Return it.
+	if atEOF {
+		return len(data), data, nil
+	}
+
+	// Request more data.
+	return 0, nil, nil
 }
 
 func privilegedCommand(eggsPath string, args []string, adminPassword, luksPassphrase string) (string, []string, error) {

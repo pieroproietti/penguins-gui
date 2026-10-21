@@ -126,18 +126,121 @@ func main() {
 	})
 	howToBoot.Hide()
 
+	const maxLogLines = 1000
+	const uiThrottleInterval = 80 * time.Millisecond
+
 	var logMu sync.Mutex
-	logText := ""
-	appendLog := func(text string) {
+	var pendingBuf strings.Builder
+	var logLines []string
+	var incompleteLine string
+	var logText string
+	var uiUpdatePending bool
+	var updateTimer *time.Timer
+
+	applyPendingLogLocked := func(flushIncomplete bool) string {
+		if pendingBuf.Len() > 0 || (flushIncomplete && incompleteLine != "") {
+			chunk := pendingBuf.String()
+			pendingBuf.Reset()
+
+			combined := incompleteLine + chunk
+			parts := strings.Split(combined, "\n")
+			if flushIncomplete {
+				incompleteLine = ""
+				for i, p := range parts {
+					if i == len(parts)-1 && p == "" {
+						continue
+					}
+					logLines = append(logLines, p)
+				}
+			} else {
+				incompleteLine = parts[len(parts)-1]
+				if len(parts) > 1 {
+					logLines = append(logLines, parts[:len(parts)-1]...)
+				}
+			}
+
+			if len(logLines) > maxLogLines {
+				trimmed := make([]string, maxLogLines)
+				copy(trimmed, logLines[len(logLines)-maxLogLines:])
+				logLines = trimmed
+			}
+
+			if incompleteLine != "" {
+				if len(logLines) > 0 {
+					logText = strings.Join(logLines, "\n") + "\n" + incompleteLine
+				} else {
+					logText = incompleteLine
+				}
+			} else {
+				logText = strings.Join(logLines, "\n")
+			}
+		}
+		return logText
+	}
+
+	renderLog := func() {
 		logMu.Lock()
-		logText += stripANSI(text)
+		if updateTimer != nil {
+			updateTimer.Stop()
+			updateTimer = nil
+		}
+		uiUpdatePending = false
+		current := applyPendingLogLocked(false)
 		logMu.Unlock()
+
+		logGrid.SetText(current)
+		logScroll.ScrollToBottom()
+	}
+
+	appendLog := func(text string) {
+		clean := stripANSI(text)
+		if clean == "" {
+			return
+		}
+		logMu.Lock()
+		pendingBuf.WriteString(clean)
+		if !uiUpdatePending {
+			uiUpdatePending = true
+			updateTimer = time.AfterFunc(uiThrottleInterval, func() {
+				fyne.Do(renderLog)
+			})
+		}
+		logMu.Unlock()
+	}
+
+	flushLog := func() {
+		done := make(chan struct{})
 		fyne.Do(func() {
 			logMu.Lock()
-			current := logText
+			if updateTimer != nil {
+				updateTimer.Stop()
+				updateTimer = nil
+			}
+			uiUpdatePending = false
+			current := applyPendingLogLocked(true)
 			logMu.Unlock()
+
 			logGrid.SetText(current)
 			logScroll.ScrollToBottom()
+			close(done)
+		})
+		<-done
+	}
+
+	resetLog := func() {
+		logMu.Lock()
+		if updateTimer != nil {
+			updateTimer.Stop()
+			updateTimer = nil
+		}
+		uiUpdatePending = false
+		pendingBuf.Reset()
+		logLines = nil
+		incompleteLine = ""
+		logText = ""
+		logMu.Unlock()
+		fyne.Do(func() {
+			logGrid.SetText("")
 		})
 	}
 
@@ -167,6 +270,7 @@ func main() {
 
 	copyLog := func() {
 		logMu.Lock()
+		_ = applyPendingLogLocked(false)
 		text := logText
 		logMu.Unlock()
 		if text == "" {
@@ -179,10 +283,7 @@ func main() {
 	tbCopyLog := newActionButton("Copy", theme.ContentCopyIcon(), copyLog,
 		func() { setExplanation("Copy the current operation log to the clipboard.") }, resetExplanation)
 	clearLog := func() {
-		logMu.Lock()
-		logText = ""
-		logMu.Unlock()
-		logGrid.SetText("")
+		resetLog()
 		setExplanation("Log cleared. Any new output will continue to appear here.")
 	}
 	tbClearLog := newActionButton("Clear", theme.ContentClearIcon(), clearLog,
@@ -228,14 +329,12 @@ func main() {
 			howToBoot.Hide()
 
 			result.SetText(fmt.Sprintf("%s in progress…", title))
-			logMu.Lock()
-			logText = ""
-			logMu.Unlock()
-			logGrid.SetText("")
+			resetLog()
 
 			go func() {
 				err := eggsCLI.RunPrivileged(executable, args, "", "", appendLog)
 				detectedPath, detectedVersion, detectedErr := eggsCLI.Detect()
+				flushLog()
 				fyne.Do(func() {
 					eggsPath, eggsVersion, detectErr = detectedPath, detectedVersion, detectedErr
 					busyMu.Lock()
@@ -320,14 +419,12 @@ func main() {
 			result.SetText("Remaster in progress…")
 			openFolder.Hide()
 			howToBoot.Hide()
-			logMu.Lock()
-			logText = ""
-			logMu.Unlock()
-			logGrid.SetText("")
+			resetLog()
 
 			startedAt := time.Now()
 			go func() {
 				err := eggsCLI.RunPrivileged(eggsPath, args, adminPassword, luksPassphrase, appendLog)
+				flushLog()
 
 				fyne.Do(func() {
 					busyMu.Lock()
@@ -487,6 +584,7 @@ func main() {
 
 			go func() {
 				err := chef.DownloadChef(chefRoot, appendLog)
+				flushLog()
 				fyne.Do(func() {
 					d.Hide()
 					if err != nil {
