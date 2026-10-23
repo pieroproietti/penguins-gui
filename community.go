@@ -1,14 +1,19 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -19,7 +24,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const MaxBioLength = 200
+const (
+	MaxBioLength              = 200
+	DefaultCommunityEndpoint  = "https://api.penguins-eggs.net/api/community"
+	FallbackCommunityEndpoint = "https://penguins-eggs.net/api/community"
+)
 
 var (
 	emailValidationPattern = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
@@ -38,10 +47,9 @@ type CommunitySocials struct {
 }
 
 // CommunityData represents user preferences for community participation.
-// Email is mandatory when enabled, but is strictly private and NEVER exposed in public logs or metadata.
+// Email is strictly forbidden to prevent spam.
 type CommunityData struct {
 	Enabled   bool             `yaml:"enabled" json:"enabled"`
-	Email     string           `yaml:"email,omitempty" json:"email,omitempty"`
 	Nickname  string           `yaml:"nickname,omitempty" json:"nickname,omitempty"`
 	Location  string           `yaml:"location,omitempty" json:"location,omitempty"`
 	SourceURL string           `yaml:"source_url,omitempty" json:"source_url,omitempty"` // repository or project website
@@ -213,35 +221,31 @@ func ValidateContact(contact string) error {
 	return nil
 }
 
-// ValidateCommunityData validates community fields: email and source URL are required when enabled,
-// bio must not exceed MaxBioLength (200 characters), and public fields must never contain emails.
+// ValidateCommunityData validates community fields:
+// bio must not exceed MaxBioLength (200 characters),
+// source URL must be valid if provided,
+// and all public fields must never contain email addresses.
 func ValidateCommunityData(data CommunityData) error {
 	if !data.Enabled {
 		return nil
 	}
 
-	trimmedEmail := strings.TrimSpace(data.Email)
-	if trimmedEmail == "" {
-		return errors.New("email address is required")
-	}
-	if !IsValidEmail(trimmedEmail) {
-		return errors.New("please enter a valid email address (e.g. user@example.com)")
-	}
-
 	trimmedSource := strings.TrimSpace(data.SourceURL)
-	if trimmedSource == "" {
-		return errors.New("source repository or website URL is required (e.g. https://github.com/user/distro)")
-	}
-	cleanSource := CleanSourceURL(trimmedSource)
-	if !IsValidURL(cleanSource) {
-		return errors.New("please enter a valid source repository or website URL")
-	}
-	if err := ValidateContact(trimmedSource); err != nil {
-		return fmt.Errorf("source URL: %w", err)
+	if trimmedSource != "" {
+		cleanSource := CleanSourceURL(trimmedSource)
+		if !IsValidURL(cleanSource) {
+			return errors.New("please enter a valid source repository or website URL")
+		}
+		if err := ValidateContact(trimmedSource); err != nil {
+			return fmt.Errorf("source URL: %w", err)
+		}
 	}
 
 	if len([]rune(data.Bio)) > MaxBioLength {
 		return fmt.Errorf("bio must not exceed %d characters (currently %d)", MaxBioLength, len([]rune(data.Bio)))
+	}
+	if err := ValidateContact(data.Bio); err != nil {
+		return fmt.Errorf("bio: %w", err)
 	}
 
 	if err := ValidateContact(data.Nickname); err != nil {
@@ -376,8 +380,7 @@ func LoadCommunityData() CommunityData {
 				comm.Socials.X = CleanPlatformHandle("x", comm.Socials.X)
 			}
 
-			// Clean email, source URL, and bio
-			comm.Email = strings.TrimSpace(comm.Email)
+			// Clean source URL and bio
 			comm.SourceURL = strings.TrimSpace(comm.SourceURL)
 			if comm.SourceURL != "" {
 				comm.SourceURL = CleanSourceURL(comm.SourceURL)
@@ -445,7 +448,6 @@ func SaveCommunityData(data CommunityData) error {
 
 		toSave = CommunityData{
 			Enabled:   true,
-			Email:     strings.TrimSpace(data.Email),
 			Nickname:  strings.TrimSpace(data.Nickname),
 			Location:  strings.TrimSpace(data.Location),
 			SourceURL: cleanSource,
@@ -465,37 +467,264 @@ func SaveCommunityData(data CommunityData) error {
 	}
 	out = append(out, '\n')
 
-	return os.WriteFile(path, out, 0644)
+	if err := os.WriteFile(path, out, 0644); err != nil {
+		return err
+	}
+
+	// Also persist community settings into custom.yaml in user configuration directory (without email)
+	saveToCustomYAML(filepath.Join(dir, "custom.yaml"), toSave)
+
+	return nil
+}
+
+func saveToCustomYAML(customYamlPath string, data CommunityData) {
+	var root map[string]interface{}
+	if existingBytes, err := os.ReadFile(customYamlPath); err == nil {
+		_ = yaml.Unmarshal(existingBytes, &root)
+	}
+	if root == nil {
+		root = make(map[string]interface{})
+	}
+
+	if data.Enabled {
+		root["community"] = data
+	} else {
+		root["community"] = map[string]interface{}{
+			"enabled": false,
+		}
+	}
+
+	if yamlBytes, err := yaml.Marshal(root); err == nil {
+		_ = os.WriteFile(customYamlPath, yamlBytes, 0644)
+	}
+}
+
+func getCommunityEndpoint() string {
+	if ep := strings.TrimSpace(os.Getenv("EGGS_COMMUNITY_ENDPOINT")); ep != "" {
+		return ep
+	}
+	if ep := strings.TrimSpace(os.Getenv("CENSUS_COMMUNITY_URL")); ep != "" {
+		return ep
+	}
+	return DefaultCommunityEndpoint
+}
+
+func deriveUUIDFromMachineID(machineID string) string {
+	normalized := strings.ToLower(strings.TrimSpace(machineID))
+	sum := sha256.Sum256([]byte("penguins-eggs-census:" + normalized))
+	var b [16]byte
+	copy(b[:], sum[:16])
+	b[6] = (b[6] & 0x0f) | 0x50 // Version 5
+	b[8] = (b[8] & 0x3f) | 0x80 // RFC 4122
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+func readAndDeriveMachineID(path string) (string, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	raw := strings.TrimSpace(string(data))
+	if raw == "" || raw == "uninitialized" || strings.Trim(raw, "0") == "" {
+		return "", false
+	}
+	return deriveUUIDFromMachineID(raw), true
+}
+
+// GetMachineUUID returns the anonymized UUID derived from machine-id or stored census.json.
+func GetMachineUUID() string {
+	if custom := strings.TrimSpace(os.Getenv("EGGS_MACHINE_ID_PATH")); custom != "" {
+		if id, ok := readAndDeriveMachineID(custom); ok {
+			return id
+		}
+	}
+
+	// 1. Check census.json (etc or user config) which contains the exact eggs uuid
+	for _, p := range []string{
+		"/etc/penguins-eggs/census.json",
+		"/etc/penguins-eggs.d/census.json",
+	} {
+		if data, err := os.ReadFile(p); err == nil {
+			var m map[string]interface{}
+			if err := json.Unmarshal(data, &m); err == nil {
+				if u, ok := m["uuid"].(string); ok && len(u) >= 8 {
+					return strings.TrimSpace(u)
+				}
+			}
+		}
+	}
+
+	if userPath := getEggsConfigPath(); userPath != "" {
+		dir := filepath.Dir(userPath)
+		for _, name := range []string{"census.json", ".census_id"} {
+			p := filepath.Join(dir, name)
+			if data, err := os.ReadFile(p); err == nil {
+				var m map[string]interface{}
+				if err := json.Unmarshal(data, &m); err == nil {
+					if u, ok := m["uuid"].(string); ok && len(u) >= 8 {
+						return strings.TrimSpace(u)
+					}
+				}
+				s := strings.TrimSpace(string(data))
+				if len(s) >= 8 && len(s) <= 64 && !strings.Contains(s, "{") {
+					return s
+				}
+			}
+		}
+	}
+
+	// 2. Check system machine-id files (used by eggs)
+	for _, p := range []string{
+		"/etc/penguins-eggs.d/machine-id",
+		"/etc/machine-id",
+		"/var/lib/dbus/machine-id",
+	} {
+		if id, ok := readAndDeriveMachineID(p); ok {
+			return id
+		}
+	}
+
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "unknown-host"
+	}
+	return deriveUUIDFromMachineID(hostname)
+}
+
+// SyncCommunityProfile communicates directly with /api/community:
+// If data.Enabled is true, it sends a PUT request to https://api.penguins-eggs.net/api/community/{uuid}.
+// If data.Enabled is false, it sends a DELETE request to https://api.penguins-eggs.net/api/community/{uuid}.
+// Fail-safe: uses a short 7s timeout and falls back to FallbackCommunityEndpoint if the primary host fails.
+func SyncCommunityProfile(data CommunityData) error {
+	uuid := GetMachineUUID()
+	if uuid == "" {
+		return errors.New("unable to determine machine UUID")
+	}
+
+	endpoint := getCommunityEndpoint()
+	endpoint = strings.TrimSuffix(endpoint, "/")
+
+	client := &http.Client{
+		Timeout: 7 * time.Second,
+	}
+
+	if !data.Enabled {
+		delURL := fmt.Sprintf("%s/%s", endpoint, uuid)
+		req, err := http.NewRequest(http.MethodDelete, delURL, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := client.Do(req)
+		if err != nil && endpoint == DefaultCommunityEndpoint {
+			// Try fallback host
+			fallbackURL := fmt.Sprintf("%s/%s", FallbackCommunityEndpoint, uuid)
+			if reqFallback, fErr := http.NewRequest(http.MethodDelete, fallbackURL, nil); fErr == nil {
+				if fResp, fDoErr := client.Do(reqFallback); fDoErr == nil {
+					resp = fResp
+					err = nil
+				}
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("network error removing profile: %w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("server error (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		}
+		return nil
+	}
+
+	socials := make(map[string]string)
+	if s := CleanPlatformHandle("facebook", data.Socials.Facebook); s != "" {
+		socials["facebook"] = s
+	}
+	if s := CleanPlatformHandle("gitee", data.Socials.Gitee); s != "" {
+		socials["gitee"] = s
+	}
+	if s := CleanPlatformHandle("github", data.Socials.GitHub); s != "" {
+		socials["github"] = s
+	}
+	if s := CleanPlatformHandle("telegram", data.Socials.Telegram); s != "" {
+		socials["telegram"] = s
+	}
+	if s := CleanPlatformHandle("wechat", data.Socials.WeChat); s != "" {
+		socials["wechat"] = s
+	}
+	if s := CleanPlatformHandle("whatsapp", data.Socials.WhatsApp); s != "" {
+		socials["whatsapp"] = s
+	}
+	if s := CleanPlatformHandle("x", data.Socials.X); s != "" {
+		socials["x"] = s
+	}
+
+	payloadMap := map[string]interface{}{
+		"uuid":       uuid,
+		"nickname":   strings.TrimSpace(data.Nickname),
+		"location":   strings.TrimSpace(data.Location),
+		"source_url": CleanSourceURL(data.SourceURL),
+		"bio":        strings.TrimSpace(data.Bio),
+		"contact":    data.Contact,
+		"socials":    socials,
+		"enabled":    true,
+	}
+
+	payloadBytes, err := json.Marshal(payloadMap)
+	if err != nil {
+		return err
+	}
+
+	putURL := fmt.Sprintf("%s/%s", endpoint, uuid)
+	req, err := http.NewRequest(http.MethodPut, putURL, bytes.NewReader(payloadBytes))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil && endpoint == DefaultCommunityEndpoint {
+		// Try fallback host
+		fallbackURL := fmt.Sprintf("%s/%s", FallbackCommunityEndpoint, uuid)
+		if reqFallback, fErr := http.NewRequest(http.MethodPut, fallbackURL, bytes.NewReader(payloadBytes)); fErr == nil {
+			reqFallback.Header.Set("Content-Type", "application/json")
+			if fResp, fDoErr := client.Do(reqFallback); fDoErr == nil {
+				resp = fResp
+				err = nil
+			}
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("network error updating profile: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("server error (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	return nil
 }
 
 // buildCommunityPanel creates the UI container for the Community configuration panel.
 func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.CanvasObject, func() CommunityData) {
-	title := widget.NewLabelWithStyle("Community", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	checkEnabled := widget.NewCheck("Join the Penguins Eggs Community", nil)
 
-	checkEnabled := widget.NewCheck("Enable Community", nil)
-
-	// Base profile fields
-	emailEntry := widget.NewEntry()
-	emailEntry.SetPlaceHolder("e.g. artisan@example.com (required, kept strictly private)")
-
-	emailHelp := widget.NewLabel("🔒 Required: Your email will NEVER be published, exposed, or shared publicly.")
-	emailHelp.TextStyle = fyne.TextStyle{Italic: true}
-	emailHelp.Wrapping = fyne.TextWrapWord
-
+	// 2. Nickname / Public handle
 	nicknameEntry := widget.NewEntry()
-	nicknameEntry.SetPlaceHolder("e.g. tux_artisan")
+	nicknameEntry.SetPlaceHolder("e.g. tux_artisan or @nickname")
 
+	// 3. Location / City
 	locationEntry := widget.NewEntry()
-	locationEntry.SetPlaceHolder("e.g. Rome, Madrid, Buenos Aires, Beijing...")
+	locationEntry.SetPlaceHolder("e.g. Rome, IT")
 
+	// 4. Repository / Website URL (source_url)
 	sourceURLEntry := widget.NewEntry()
-	sourceURLEntry.SetPlaceHolder("e.g. https://github.com/user/project or https://distro.org")
+	sourceURLEntry.SetPlaceHolder("e.g. https://github.com/user/distro or https://mydistro.org")
 
-	sourceURLHelp := widget.NewLabel("🌐 Required: Source code repository, issue tracker, or project website.")
-	sourceURLHelp.TextStyle = fyne.TextStyle{Italic: true}
-	sourceURLHelp.Wrapping = fyne.TextWrapWord
-
-	// Bio entry with 200 characters maximum length
+	// 5. Bio / Description (before socials, max 200 characters)
 	bioEntry := widget.NewMultiLineEntry()
 	bioEntry.SetPlaceHolder("Short description of your project, distro, or interests (max 200 characters)...")
 	bioEntry.Wrapping = fyne.TextWrapWord
@@ -504,15 +733,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 	bioCounterLabel := widget.NewLabel(fmt.Sprintf("0/%d characters", MaxBioLength))
 	bioCounterLabel.TextStyle = fyne.TextStyle{Italic: true}
 
-	// Social Networks in alphabetical order:
-	// 1. Facebook
-	// 2. Gitee
-	// 3. GitHub
-	// 4. Telegram
-	// 5. WeChat
-	// 6. WhatsApp
-	// 7. X (Twitter)
-
+	// 6. Social Networks / Contact (alphabetical order)
 	checkFacebook := widget.NewCheck("Facebook", nil)
 	entryFacebook := widget.NewEntry()
 	entryFacebook.SetPlaceHolder("e.g. username or facebook.com/username")
@@ -541,7 +762,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 	entryX := widget.NewEntry()
 	entryX.SetPlaceHolder("e.g. @username or x.com/username")
 
-	socialHelp := widget.NewLabel("ℹ️ Optional: Select any social links to share publicly. Email addresses cannot be entered here.")
+	socialHelp := widget.NewLabel("ℹ️ Optional: enter your public social channels. Email addresses are strictly forbidden; Fediverse handles (@user@instance.social) are allowed.")
 	socialHelp.TextStyle = fyne.TextStyle{Italic: true}
 	socialHelp.Wrapping = fyne.TextWrapWord
 
@@ -582,7 +803,6 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 
 		return CommunityData{
 			Enabled:   checkEnabled.Checked,
-			Email:     strings.TrimSpace(emailEntry.Text),
 			Nickname:  strings.TrimSpace(nicknameEntry.Text),
 			Location:  strings.TrimSpace(locationEntry.Text),
 			SourceURL: CleanSourceURL(sourceURLEntry.Text),
@@ -618,7 +838,6 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 	updateFieldStates := func() {
 		enabled := checkEnabled.Checked
 		if enabled {
-			emailEntry.Enable()
 			nicknameEntry.Enable()
 			locationEntry.Enable()
 			sourceURLEntry.Enable()
@@ -667,9 +886,8 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 				entryX.Disable()
 			}
 
-			statusLabel.SetText("Participation active: enter your required private email, source URL, optional profile details, and save preferences.")
+			statusLabel.SetText("Partecipazione attiva: compila i campi e premi Salva per sincronizzare il profilo con la community.")
 		} else {
-			emailEntry.Disable()
 			nicknameEntry.Disable()
 			locationEntry.Disable()
 			sourceURLEntry.Disable()
@@ -689,7 +907,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 			entryWhatsApp.Disable()
 			entryX.Disable()
 			validationError.SetText("")
-			statusLabel.SetText("Community participation is disabled.")
+			statusLabel.SetText("Partecipazione alla community disattivata.")
 		}
 		validateInputs()
 	}
@@ -756,7 +974,6 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 	onTextChange := func(string) {
 		validateInputs()
 	}
-	emailEntry.OnChanged = onTextChange
 	nicknameEntry.OnChanged = onTextChange
 	locationEntry.OnChanged = onTextChange
 	sourceURLEntry.OnChanged = onTextChange
@@ -768,7 +985,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 			bioEntry.SetText(string(runes[:MaxBioLength]))
 			runes = []rune(bioEntry.Text)
 		}
-		bioCounterLabel.SetText(fmt.Sprintf("%d/%d characters", len(runes), MaxBioLength))
+		bioCounterLabel.SetText(fmt.Sprintf("%d/%d caratteri", len(runes), MaxBioLength))
 		validateInputs()
 	}
 
@@ -780,34 +997,45 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 	entryWhatsApp.OnChanged = onTextChange
 	entryX.OnChanged = onTextChange
 
-	saveBtn = widget.NewButtonWithIcon("Save Preferences", theme.DocumentSaveIcon(), func() {
+	saveBtn = widget.NewButtonWithIcon("Salva / Aggiorna profilo Community", theme.DocumentSaveIcon(), func() {
 		if checkEnabled.Checked && !validateInputs() {
-			dialog.ShowError(errors.New("please correct the validation errors before saving"), w)
+			dialog.ShowError(errors.New("correggi gli errori di validazione prima di salvare"), w)
 			return
 		}
 		data := currentData()
 		if err := SaveCommunityData(data); err != nil {
-			dialog.ShowError(fmt.Errorf("unable to save preferences: %w", err), w)
+			dialog.ShowError(fmt.Errorf("impossibile salvare le preferenze locali: %w", err), w)
 			return
 		}
-		if data.Enabled {
-			statusLabel.SetText("✅ Preferences saved to " + getEggsConfigPath())
-		} else {
-			statusLabel.SetText("✅ Preferences saved (participation disabled).")
-		}
+
+		statusLabel.SetText("Sincronizzazione in corso con il server community...")
 		if onUpdate != nil {
 			onUpdate(data)
 		}
+
+		go func() {
+			err := SyncCommunityProfile(data)
+			fyne.Do(func() {
+				if err != nil {
+					statusLabel.SetText("⚠️ Salvato localmente, errore server: " + err.Error())
+				} else {
+					if data.Enabled {
+						statusLabel.SetText("✅ Profilo salvato e sincronizzato con successo su " + getCommunityEndpoint())
+					} else {
+						statusLabel.SetText("✅ Profilo disattivato e rimosso dal server.")
+					}
+				}
+			})
+		}()
 	})
 
-	clearBtn := widget.NewButtonWithIcon("Disable / Clear Fields", theme.ContentClearIcon(), func() {
+	clearBtn := widget.NewButtonWithIcon("Disabilita / Cancella Campi", theme.ContentClearIcon(), func() {
 		checkEnabled.SetChecked(false)
-		emailEntry.SetText("")
 		nicknameEntry.SetText("")
 		locationEntry.SetText("")
 		sourceURLEntry.SetText("")
 		bioEntry.SetText("")
-		bioCounterLabel.SetText(fmt.Sprintf("0/%d characters", MaxBioLength))
+		bioCounterLabel.SetText(fmt.Sprintf("0/%d caratteri", MaxBioLength))
 		entryFacebook.SetText("")
 		entryGitee.SetText("")
 		entryGitHub.SetText("")
@@ -828,6 +1056,18 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 		if onUpdate != nil {
 			onUpdate(data)
 		}
+
+		statusLabel.SetText("Rimozione profilo dal server in corso...")
+		go func() {
+			err := SyncCommunityProfile(data)
+			fyne.Do(func() {
+				if err != nil {
+					statusLabel.SetText("⚠️ Preferenze azzerate localmente, errore server: " + err.Error())
+				} else {
+					statusLabel.SetText("✅ Profilo disabilitato e rimosso dal server.")
+				}
+			})
+		}()
 	})
 
 	checkEnabled.OnChanged = func(checked bool) {
@@ -838,6 +1078,9 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 			if onUpdate != nil {
 				onUpdate(data)
 			}
+			go func() {
+				_ = SyncCommunityProfile(data)
+			}()
 		}
 	}
 
@@ -845,12 +1088,11 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 	initial := LoadCommunityData()
 	if initial.Enabled {
 		checkEnabled.SetChecked(true)
-		emailEntry.SetText(initial.Email)
 		nicknameEntry.SetText(initial.Nickname)
 		locationEntry.SetText(initial.Location)
 		sourceURLEntry.SetText(initial.SourceURL)
 		bioEntry.SetText(initial.Bio)
-		bioCounterLabel.SetText(fmt.Sprintf("%d/%d characters", len([]rune(initial.Bio)), MaxBioLength))
+		bioCounterLabel.SetText(fmt.Sprintf("%d/%d caratteri", len([]rune(initial.Bio)), MaxBioLength))
 
 		if initial.Socials.Facebook != "" {
 			checkFacebook.SetChecked(true)
@@ -900,12 +1142,13 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 
 	infoBtn := widget.NewButtonWithIcon("Info", theme.InfoIcon(), func() {
 		dialog.ShowInformation(
-			"Community",
-			"Join the global Penguins Eggs community!\n\n"+
-				"Connect with other Linux artisans and remasters.\n\n"+
-				"• Email is required for registration and will never be exposed under any circumstances.\n"+
-				"• Source repository or website is required.\n"+
-				"• Social links are optional and in alphabetical order.",
+			"Penguins Community",
+			"Partecipa alla community globale di Penguins Eggs!\n\n"+
+				"Connettiti con altri sviluppatori e artigiani di distribuzioni Linux.\n\n"+
+				"• Nessun indirizzo email viene richiesto o salvato (anti-spam).\n"+
+				"• Il profilo è pubblicato direttamente su "+getCommunityEndpoint()+"\n"+
+				"• La bio ha un limite massimo di 200 caratteri.\n"+
+				"• I link social sono opzionali e supportano handle Fediverse.",
 			w,
 		)
 	})
@@ -913,39 +1156,43 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(CommunityData)) (fyne.Canv
 	btnRow := container.NewHBox(saveBtn, clearBtn, infoBtn, layout.NewSpacer())
 
 	topBar := container.NewVBox(
-		title,
 		btnRow,
 		statusLabel,
 		validationError,
 		widget.NewSeparator(),
 	)
 
-	// Profile Information & Main Contacts -> Bio (max 200 chars) -> Social Networks (alphabetical)
+	// Nuovo ordine del layout:
+	// 1. Spunta principale: Join the Penguins Eggs Community
+	// 2. Nickname / Public handle
+	// 3. Location / City (e.g. Roma, IT)
+	// 4. Repository / Website URL (source_url)
+	// 5. Bio / Description (before socials, max 200 characters)
+	// 6. Social Networks / Contact
 	formContent := container.NewVBox(
 		checkEnabled,
 		widget.NewSeparator(),
 
-		// Profile Information
-		widget.NewLabelWithStyle("Profile Information:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		widget.NewLabel("Email (required - strictly private):"),
-		emailEntry,
-		emailHelp,
-		widget.NewLabel("Nickname / Public handle:"),
+		// 2. Nickname / Public handle
+		widget.NewLabelWithStyle("Nickname / Public handle:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		nicknameEntry,
-		widget.NewLabel("Location / City:"),
-		locationEntry,
-		widget.NewLabel("Source / Repository / Website (required):"),
-		sourceURLEntry,
-		sourceURLHelp,
 
-		// Bio / Description immediately below main profile contacts (before Social Networks)
-		widget.NewLabelWithStyle("Bio / Description (optional, max 200 characters):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		// 3. Location / City
+		widget.NewLabelWithStyle("Location / City (e.g. Roma, IT):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		locationEntry,
+
+		// 4. Repository / Website URL (source_url)
+		widget.NewLabelWithStyle("Repository / Website URL (source_url):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		sourceURLEntry,
+
+		// 5. Bio / Description (spostata PRIMA dei social network)
+		widget.NewLabelWithStyle("Bio / Description (max 200 characters):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		bioEntry,
 		bioCounterLabel,
 		widget.NewSeparator(),
 
-		// Social Networks in alphabetical order
-		widget.NewLabelWithStyle("Social Networks (alphabetical order, optional):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		// 6. Social Networks / Contact
+		widget.NewLabelWithStyle("Social Networks / Contact (optional):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		socialHelp,
 		socialsForm,
 	)

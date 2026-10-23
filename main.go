@@ -480,6 +480,20 @@ func main() {
 							openFolder.Show()
 							howToBoot.Show()
 						}
+
+						if getCommunityData != nil {
+							comm := getCommunityData()
+							if comm.Enabled {
+								go func() {
+									if syncErr := SyncCommunityProfile(comm); syncErr != nil {
+										appendLog(fmt.Sprintf("[community] Warning: failed to sync profile to community server: %v\n", syncErr))
+									} else {
+										appendLog(fmt.Sprintf("[community] Profile successfully published to %s\n", getCommunityEndpoint()))
+									}
+								}()
+							}
+						}
+
 						dialog.ShowInformation("Remaster completed", "Penguins’ Eggs finished successfully.\n\n"+result.Text, w)
 					}
 				})

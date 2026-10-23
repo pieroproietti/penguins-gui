@@ -1,6 +1,10 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,32 +12,6 @@ import (
 
 	"fyne.io/fyne/v2/test"
 )
-
-func TestIsValidEmail(t *testing.T) {
-	cases := []struct {
-		email string
-		valid bool
-	}{
-		{"user@example.com", true},
-		{"piero.proietti@gmail.com", true},
-		{"developer+eggs@sub.domain.org", true},
-		{"artisan_123@linux.it", true},
-		{"", false},
-		{"invalid", false},
-		{"user@", false},
-		{"@domain.com", false},
-		{"user@domain", false},
-		{"user space@domain.com", false},
-		{"mailto:user@example.com", false},
-	}
-
-	for _, tc := range cases {
-		got := IsValidEmail(tc.email)
-		if got != tc.valid {
-			t.Errorf("IsValidEmail(%q) = %v, expected %v", tc.email, got, tc.valid)
-		}
-	}
-}
 
 func TestCleanSourceURLAndIsValidURL(t *testing.T) {
 	cases := []struct {
@@ -72,7 +50,6 @@ func TestBioCharacterLimit(t *testing.T) {
 
 	validData := CommunityData{
 		Enabled:   true,
-		Email:     "artisan@example.com",
 		SourceURL: "https://github.com/distro/linux",
 		Bio:       validBio,
 	}
@@ -210,50 +187,18 @@ func TestValidateCommunityData(t *testing.T) {
 		t.Errorf("expected disabled to be valid without email or source, got %v", err)
 	}
 
-	// Enabled requires email
-	enabledNoEmail := CommunityData{
-		Enabled:   true,
-		Nickname:  "tux_artisan",
-		SourceURL: "https://github.com/distro/linux",
-	}
-	if err := ValidateCommunityData(enabledNoEmail); err == nil {
-		t.Errorf("expected error when email is missing and enabled is true")
-	}
-
-	// Enabled with invalid email fails
-	enabledInvalidEmail := CommunityData{
-		Enabled:   true,
-		Email:     "invalid-email",
-		SourceURL: "https://github.com/distro/linux",
-	}
-	if err := ValidateCommunityData(enabledInvalidEmail); err == nil {
-		t.Errorf("expected error with invalid email")
-	}
-
-	// Enabled without SourceURL fails
-	enabledNoSource := CommunityData{
-		Enabled:  true,
-		Email:    "artisan@example.com",
-		Nickname: "tux_artisan",
-	}
-	if err := ValidateCommunityData(enabledNoSource); err == nil {
-		t.Errorf("expected error when source_url is missing and enabled is true")
-	}
-
 	// Enabled with invalid SourceURL fails
 	enabledInvalidSource := CommunityData{
 		Enabled:   true,
-		Email:     "artisan@example.com",
-		SourceURL: "   ",
+		SourceURL: "http//invalid-url",
 	}
 	if err := ValidateCommunityData(enabledInvalidSource); err == nil {
-		t.Errorf("expected error when source_url is empty whitespace")
+		t.Errorf("expected error when source_url is invalid")
 	}
 
-	// Enabled with valid email and source URL succeeds
+	// Enabled with valid source URL succeeds without email
 	validData := CommunityData{
 		Enabled:   true,
-		Email:     "artisan@example.com",
 		Nickname:  "tux_artisan",
 		Location:  "Rome, IT",
 		SourceURL: "https://github.com/distro/linux",
@@ -286,6 +231,20 @@ func TestValidateCommunityData(t *testing.T) {
 	if err := ValidateCommunityData(emailInNick); err == nil {
 		t.Errorf("expected error when email is entered in nickname")
 	}
+
+	// Email forbidden in bio
+	emailInBio := validData
+	emailInBio.Bio = "Contact me at hello@domain.org"
+	if err := ValidateCommunityData(emailInBio); err == nil {
+		t.Errorf("expected error when email is entered in bio")
+	}
+
+	// Fediverse handle allowed
+	fediData := validData
+	fediData.Socials.X = "@artisan@fosstodon.org"
+	if err := ValidateCommunityData(fediData); err != nil {
+		t.Errorf("expected Fediverse handle to be allowed, got: %v", err)
+	}
 }
 
 func TestSaveAndLoadCommunityData(t *testing.T) {
@@ -299,7 +258,6 @@ func TestSaveAndLoadCommunityData(t *testing.T) {
 
 	data := CommunityData{
 		Enabled:   true,
-		Email:     "artisan@example.com",
 		Nickname:  "tux_artisan",
 		Location:  "Rome, IT",
 		SourceURL: "https//github.com/pieroproietti/penguins-gui", // typo cleaned
@@ -324,12 +282,18 @@ func TestSaveAndLoadCommunityData(t *testing.T) {
 		t.Fatalf("community.json was not created: %v", err)
 	}
 
+	yamlFile := filepath.Join(tmpDir, "penguins-eggs", "custom.yaml")
+	yamlBytes, err := os.ReadFile(yamlFile)
+	if err != nil {
+		t.Fatalf("custom.yaml was not created: %v", err)
+	}
+	if strings.Contains(string(yamlBytes), "email") {
+		t.Errorf("custom.yaml should NOT contain email: %s", string(yamlBytes))
+	}
+
 	loaded := LoadCommunityData()
 	if !loaded.Enabled {
 		t.Fatalf("expected loaded.Enabled == true")
-	}
-	if loaded.Email != "artisan@example.com" {
-		t.Errorf("expected email 'artisan@example.com', got %q", loaded.Email)
 	}
 	if loaded.Nickname != "tux_artisan" {
 		t.Errorf("expected nickname 'tux_artisan', got %q", loaded.Nickname)
@@ -347,12 +311,9 @@ func TestSaveAndLoadCommunityData(t *testing.T) {
 		t.Errorf("expected cleaned whatsapp '+393331234567', got %q", loaded.Socials.WhatsApp)
 	}
 
-	// Primary contact should be Facebook (alphabetically first) and NEVER the email
+	// Primary contact should be Facebook (alphabetically first)
 	if loaded.Contact != "https://facebook.com/pierofb" {
 		t.Errorf("expected primary contact 'https://facebook.com/pierofb', got %q", loaded.Contact)
-	}
-	if strings.Contains(loaded.Contact, "@example.com") {
-		t.Fatalf("email was exposed in contact: %s", loaded.Contact)
 	}
 }
 
@@ -365,7 +326,7 @@ func TestEmailNeverExposedInContact(t *testing.T) {
 		t.Errorf("contact looks like an exposed email: %s", contact)
 	}
 
-	// Even if someone only provided an email, contact must remain empty
+	// Even if someone only provided empty socials, contact must remain empty
 	socialsEmpty := CommunitySocials{}
 	emptyContact := ComputePrimaryContact(socialsEmpty)
 	if emptyContact != "" {
@@ -398,9 +359,6 @@ func TestBackwardCompatibilityWithMalformedCustomYaml(t *testing.T) {
 	if !loaded.Enabled {
 		t.Fatalf("expected loaded.Enabled == true")
 	}
-	if loaded.Email != "artisan@example.com" {
-		t.Errorf("expected email 'artisan@example.com', got %q", loaded.Email)
-	}
 	if loaded.SourceURL != "https://github.com/pieroproietti/penguins-eggs" {
 		t.Errorf("expected cleaned source_url 'https://github.com/pieroproietti/penguins-eggs', got %q", loaded.SourceURL)
 	}
@@ -411,7 +369,7 @@ func TestBackwardCompatibilityWithMalformedCustomYaml(t *testing.T) {
 		t.Errorf("expected corrected contact 'https://github.com/pieroproietti', got %q", loaded.Contact)
 	}
 
-	// Resaving must produce clean JSON with email, source_url and clean contact in community.json
+	// Resaving must produce clean JSON without email
 	if err := SaveCommunityData(loaded); err != nil {
 		t.Fatalf("SaveCommunityData failed: %v", err)
 	}
@@ -424,11 +382,8 @@ func TestBackwardCompatibilityWithMalformedCustomYaml(t *testing.T) {
 	if strings.Contains(savedStr, "github.com/https") {
 		t.Errorf("saved JSON still contains invalid string: %s", savedStr)
 	}
-	if !strings.Contains(savedStr, `"contact": "https://github.com/pieroproietti"`) {
-		t.Errorf("saved JSON missing proper contact: %s", savedStr)
-	}
-	if !strings.Contains(savedStr, `"email": "artisan@example.com"`) {
-		t.Errorf("saved JSON missing email: %s", savedStr)
+	if strings.Contains(savedStr, `"email"`) {
+		t.Errorf("saved JSON should NOT contain email: %s", savedStr)
 	}
 	if !strings.Contains(savedStr, `"source_url": "https://github.com/pieroproietti/penguins-eggs"`) {
 		t.Errorf("saved JSON missing source_url: %s", savedStr)
@@ -453,5 +408,84 @@ func TestBuildCommunityPanel(t *testing.T) {
 	data := getData()
 	if data.Enabled {
 		t.Errorf("expected initially disabled data")
+	}
+}
+
+func TestSyncCommunityProfile(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	var lastMethod string
+	var lastPath string
+	var lastBody []byte
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lastMethod = r.Method
+		lastPath = r.URL.Path
+		body, _ := io.ReadAll(r.Body)
+		lastBody = body
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("EGGS_COMMUNITY_ENDPOINT", srv.URL+"/api/community")
+
+	// 1. Sync enabled profile -> PUT /api/community/{uuid}
+	data := CommunityData{
+		Enabled:   true,
+		Nickname:  "artisan_sync",
+		Location:  "Rome, IT",
+		SourceURL: "https://github.com/artisan/distro",
+		Bio:       "Distro creator",
+		Socials: CommunitySocials{
+			GitHub: "artisan",
+		},
+	}
+	if err := SyncCommunityProfile(data); err != nil {
+		t.Fatalf("SyncCommunityProfile enabled failed: %v", err)
+	}
+
+	if lastMethod != http.MethodPut {
+		t.Errorf("expected PUT method, got %s", lastMethod)
+	}
+	if !strings.HasPrefix(lastPath, "/api/community/") {
+		t.Errorf("expected path starting with /api/community/, got %s", lastPath)
+	}
+	var sentPayload map[string]interface{}
+	if err := json.Unmarshal(lastBody, &sentPayload); err != nil {
+		t.Fatalf("failed to parse sent JSON: %v", err)
+	}
+	if sentPayload["nickname"] != "artisan_sync" || sentPayload["location"] != "Rome, IT" {
+		t.Errorf("unexpected payload content: %+v", sentPayload)
+	}
+	if _, hasEmail := sentPayload["email"]; hasEmail {
+		t.Errorf("sent payload must NEVER include email field")
+	}
+
+	// 2. Sync disabled profile -> DELETE /api/community/{uuid}
+	dataDisabled := CommunityData{
+		Enabled: false,
+	}
+	if err := SyncCommunityProfile(dataDisabled); err != nil {
+		t.Fatalf("SyncCommunityProfile disabled failed: %v", err)
+	}
+
+	if lastMethod != http.MethodDelete {
+		t.Errorf("expected DELETE method, got %s", lastMethod)
+	}
+	if !strings.HasPrefix(lastPath, "/api/community/") {
+		t.Errorf("expected path starting with /api/community/, got %s", lastPath)
+	}
+}
+
+func TestGetMachineUUID(t *testing.T) {
+	uuid := GetMachineUUID()
+	if uuid == "" {
+		t.Fatalf("GetMachineUUID returned empty string")
+	}
+	if len(uuid) < 8 {
+		t.Errorf("GetMachineUUID returned unexpectedly short string: %s", uuid)
 	}
 }
