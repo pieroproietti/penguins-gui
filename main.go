@@ -249,8 +249,12 @@ func main() {
 	var createISOMenuItem *fyne.MenuItem
 	var cookMenuItem *fyne.MenuItem
 	var grubMenuItem *fyne.MenuItem
-	var tbCreateISO, tbKill, tbClean, tbCook, tbGrub, tbDocs *actionButton
+	var communityMenuItem *fyne.MenuItem
+	var tbCreateISO, tbKill, tbClean, tbCook, tbGrub, tbDocs, tbCommunity *actionButton
 	var setButtonsEnabled func(bool)
+	var communityBtn *widget.Button
+	var getCommunityData func() CommunityData
+	var mainTabs *container.AppTabs
 
 	const defaultExplanation = "Select or hover over an action to view its description."
 	explanationLabel := widget.NewLabel(defaultExplanation)
@@ -420,6 +424,30 @@ func main() {
 			openFolder.Hide()
 			howToBoot.Hide()
 			resetLog()
+
+			if getCommunityData != nil {
+				comm := getCommunityData()
+				if comm.Enabled {
+					nick := comm.Nickname
+					if nick == "" {
+						nick = "Anonymous"
+					}
+					var details []string
+					if comm.Contact != "" {
+						details = append(details, comm.Contact)
+					}
+					if comm.SourceURL != "" {
+						details = append(details, "source: "+comm.SourceURL)
+					}
+					if len(details) > 0 {
+						appendLog(fmt.Sprintf("[community] Community participation active (@%s, %s - %s)\n\n", nick, comm.Location, strings.Join(details, " - ")))
+					} else {
+						appendLog(fmt.Sprintf("[community] Community participation active (@%s, %s)\n\n", nick, comm.Location))
+					}
+				} else {
+					appendLog("[community] Community participation: disabled\n\n")
+				}
+			}
 
 			startedAt := time.Now()
 			go func() {
@@ -772,6 +800,21 @@ func main() {
 		resetExplanation,
 	)
 
+	tbCommunity = newActionButton(
+		"Community",
+		theme.AccountIcon(),
+		func() {
+			setExplanation("Community: Configure optional participation before remastering.")
+			if mainTabs != nil {
+				mainTabs.SelectIndex(1)
+			}
+		},
+		func() {
+			setExplanation("Community: Configure your profile and optional participation before remastering.")
+		},
+		resetExplanation,
+	)
+
 	setButtonsEnabled = func(enabled bool) {
 		if enabled && detectErr == nil {
 			mode.Enable()
@@ -815,8 +858,18 @@ func main() {
 				tbCook.Disable()
 			}
 		}
+		if tbCommunity != nil {
+			if enabled {
+				tbCommunity.Enable()
+			} else {
+				tbCommunity.Disable()
+			}
+		}
 		if cookMenuItem != nil {
 			cookMenuItem.Disabled = !enabled
+		}
+		if communityMenuItem != nil {
+			communityMenuItem.Disabled = !enabled
 		}
 		grubEnabled := enabled && detectErr == nil && grubBoot.Detected
 		if grubEnabled {
@@ -852,8 +905,14 @@ func main() {
 	)
 	cookMenuItem = fyne.NewMenuItem("Cook…", cookAction)
 	grubMenuItem = fyne.NewMenuItem("Boot ISO…", grubAction)
+	communityMenuItem = fyne.NewMenuItem("Community…", func() {
+		if mainTabs != nil {
+			mainTabs.SelectIndex(1)
+		}
+	})
 	setButtonsEnabled(true)
 	editMenu := fyne.NewMenu("Edit",
+		communityMenuItem,
 		cookMenuItem,
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Install penguins-egg CLI", func() { repoAction("add") }),
@@ -990,6 +1049,7 @@ func main() {
 		tbClean,
 		tbCook,
 		tbGrub,
+		tbCommunity,
 		widget.NewSeparator(),
 		tbDocs,
 	)
@@ -997,10 +1057,37 @@ func main() {
 
 	statusBar := container.NewBorder(nil, nil, widget.NewIcon(theme.InfoIcon()), nil, explanationLabel)
 
+	communityBtn = widget.NewButtonWithIcon("Community: Disabled", theme.AccountIcon(), func() {
+		if mainTabs != nil {
+			mainTabs.SelectIndex(1)
+		}
+	})
+	communityBtn.Importance = widget.LowImportance
+
+	updateCommunityStatus := func(data CommunityData) {
+		if communityBtn == nil {
+			return
+		}
+		if data.Enabled {
+			nick := data.Nickname
+			if nick == "" {
+				nick = "Anonymous"
+			}
+			communityBtn.SetText(fmt.Sprintf("Community: @%s", nick))
+			communityBtn.Importance = widget.MediumImportance
+		} else {
+			communityBtn.SetText("Community: Disabled")
+			communityBtn.Importance = widget.LowImportance
+		}
+		communityBtn.Refresh()
+	}
+
 	modeRow := container.NewBorder(
 		nil, nil,
 		container.NewHBox(
 			mode,
+			widget.NewSeparator(),
+			communityBtn,
 			widget.NewSeparator(),
 		),
 		nil,
@@ -1025,7 +1112,20 @@ func main() {
 		result,
 		container.NewHBox(layout.NewSpacer(), howToBoot, openFolder),
 	)
-	w.SetContent(container.NewPadded(container.NewBorder(topControls, footer, nil, nil, logScroll)))
+
+	remasterContent := container.NewPadded(container.NewBorder(topControls, footer, nil, nil, logScroll))
+	var communityPanel fyne.CanvasObject
+	communityPanel, getCommunityData = buildCommunityPanel(w, updateCommunityStatus)
+	communityTabContent := container.NewPadded(communityPanel)
+
+	updateCommunityStatus(getCommunityData())
+
+	mainTabs = container.NewAppTabs(
+		container.NewTabItemWithIcon("Remaster", theme.DocumentCreateIcon(), remasterContent),
+		container.NewTabItemWithIcon("Community", theme.AccountIcon(), communityTabContent),
+	)
+
+	w.SetContent(mainTabs)
 	if detectErr != nil {
 		message := widget.NewLabel(missingEggsMessage)
 		message.Wrapping = fyne.TextWrapWord
