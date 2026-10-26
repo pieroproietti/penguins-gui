@@ -3,7 +3,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/pieroproietti/penguins-gui/pkg/builder"
+	"github.com/pieroproietti/penguins-gui/internal/builder"
 	"os"
 )
 

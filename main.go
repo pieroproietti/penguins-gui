@@ -9,7 +9,7 @@ import (
 	"github.com/pieroproietti/penguins-gui/internal/ui"
 )
 
-//go:embed pkg/builder/assets/penguins-gui.svg
+//go:embed internal/builder/assets/penguins-gui.svg
 var iconSVG []byte
 
 func main() {

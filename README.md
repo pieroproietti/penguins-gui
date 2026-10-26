@@ -154,7 +154,7 @@ The builder detects the package family from `/etc/os-release` (`ID`, then
 On Debian, packaging requires Git, `dpkg-dev` (including `dpkg-shlibdeps`) and the Fyne
 build dependencies. `make package` rebuilds the GUI and writes a native `.deb`
 to `dist/`. Cross-compilation is not supported by this packaging workflow.
-The standalone Go builder (`pkg/builder`) uses only the standard library.
+The standalone Go builder (`internal/builder`) uses only the standard library.
 
 The package installs `/usr/bin/penguins-gui`, its desktop launcher and a scalable
 SVG icon. Shared-library dependencies are calculated from the compiled binary

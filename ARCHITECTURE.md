@@ -109,13 +109,13 @@ No tool-specific branching should escape into Fyne views.
 main.go                  application entry point
 cmd/package/             native package builder CLI
 cmd/appimage/            AppImage builder CLI
+internal/builder/        native package builder
 internal/eggs/           Eggs CLI adapter, remaster modes, ISO discovery
 internal/chef/           Chef CLI adapter and recipe discovery
 internal/census/         Community profile validation, storage, UUID, and sync
 internal/system/         Host distro detection, repositories, GRUB, and installers
 internal/ui/             Fyne views, tabs, dialogs, log viewer, and theme scaling
 protocol/                JSON Schemas and examples
-pkg/builder/             native package builder
 ```
 
 ## State model
