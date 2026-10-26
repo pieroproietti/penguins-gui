@@ -34,18 +34,15 @@ func getEggsConfigPath() string {
 	return filepath.Join(dir, "community.json")
 }
 
-// LoadCommunityData loads community preferences from community.json (with fallback to legacy paths).
+// LoadCommunityData loads community preferences from community.json or community.yaml.
 func LoadCommunityData() CommunityData {
 	userPath := getEggsConfigPath()
 	candidates := []string{
 		userPath,
+		filepath.Join(filepath.Dir(userPath), "community.yaml"),
 		"/etc/penguins-eggs.d/community.json",
-		// Legacy fallbacks for migration
-		filepath.Join(filepath.Dir(userPath), "custom.yaml"),
-		filepath.Join(filepath.Dir(userPath), "custom.json"),
-		"/etc/penguins-eggs.d/custom.yaml",
-		"/etc/penguins-eggs.d/custom.yml",
-		"/etc/penguins-eggs.d/custom.json",
+		"/etc/penguins-eggs.d/community.yaml",
+		"/etc/penguins-eggs.d/community.yml",
 	}
 
 	for _, p := range candidates {
@@ -207,15 +204,15 @@ func SaveCommunityData(data CommunityData) error {
 		return err
 	}
 
-	// Also persist community settings into custom.yaml in user configuration directory (without email)
-	saveToCustomYAML(filepath.Join(dir, "custom.yaml"), toSave)
+	// Also persist community settings into community.yaml in user configuration directory (without email)
+	saveToCommunityYAML(filepath.Join(dir, "community.yaml"), toSave)
 
 	return nil
 }
 
-func saveToCustomYAML(customYamlPath string, data CommunityData) {
+func saveToCommunityYAML(communityYamlPath string, data CommunityData) {
 	var root map[string]interface{}
-	if existingBytes, err := os.ReadFile(customYamlPath); err == nil {
+	if existingBytes, err := os.ReadFile(communityYamlPath); err == nil {
 		_ = yaml.Unmarshal(existingBytes, &root)
 	}
 	if root == nil {
@@ -231,6 +228,6 @@ func saveToCustomYAML(customYamlPath string, data CommunityData) {
 	}
 
 	if yamlBytes, err := yaml.Marshal(root); err == nil {
-		_ = os.WriteFile(customYamlPath, yamlBytes, 0644)
+		_ = os.WriteFile(communityYamlPath, yamlBytes, 0644)
 	}
 }

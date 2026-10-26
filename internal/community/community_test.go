@@ -265,13 +265,13 @@ func TestSaveAndLoadCommunityData(t *testing.T) {
 		t.Fatalf("community.json was not created: %v", err)
 	}
 
-	yamlFile := filepath.Join(tmpDir, "penguins-eggs", "custom.yaml")
+	yamlFile := filepath.Join(tmpDir, "penguins-eggs", "community.yaml")
 	yamlBytes, err := os.ReadFile(yamlFile)
 	if err != nil {
-		t.Fatalf("custom.yaml was not created: %v", err)
+		t.Fatalf("community.yaml was not created: %v", err)
 	}
 	if strings.Contains(string(yamlBytes), "email") {
-		t.Errorf("custom.yaml should NOT contain email: %s", string(yamlBytes))
+		t.Errorf("community.yaml should NOT contain email: %s", string(yamlBytes))
 	}
 
 	loaded := LoadCommunityData()
@@ -314,7 +314,7 @@ func TestEmailNeverExposedInContact(t *testing.T) {
 	}
 }
 
-func TestBackwardCompatibilityWithMalformedCustomYaml(t *testing.T) {
+func TestBackwardCompatibilityWithMalformedCommunityYaml(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
@@ -333,7 +333,7 @@ func TestBackwardCompatibilityWithMalformedCustomYaml(t *testing.T) {
     github: https//github.com/pieroproietti
     telegram: '@pieroproietti'
 `)
-	_ = os.WriteFile(filepath.Join(cfgDir, "custom.yaml"), malformedYAML, 0644)
+	_ = os.WriteFile(filepath.Join(cfgDir, "community.yaml"), malformedYAML, 0644)
 
 	loaded := LoadCommunityData()
 	if !loaded.Enabled {

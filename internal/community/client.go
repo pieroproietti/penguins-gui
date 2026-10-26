@@ -179,7 +179,7 @@ func SyncCommunityProfile(data CommunityData) error {
 }
 
 // FetchProfileWithToken retrieves the community profile for the given token from /api/community/me
-// and persists it into the local community.json / custom.yaml configurations.
+// and persists it into the local community.json / community.yaml configurations.
 func FetchProfileWithToken(token string) error {
 	_, err := FetchProfileWithTokenData(token)
 	return err
