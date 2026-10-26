@@ -33,7 +33,7 @@ const (
 )
 
 var (
-	guiVersion = "v26.10.21"
+	guiVersion = "v26.10.26"
 	Author     = DefaultAuthor
 )
 
@@ -42,7 +42,7 @@ func GetGUIVersion() string {
 	if guiVersion != "" && guiVersion != "devel" {
 		return guiVersion
 	}
-	return "v26.10.21"
+	return "v26.10.26"
 }
 
 // App coordinates the Fyne window, widgets, state, and external tool adapters.

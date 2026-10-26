@@ -1,5 +1,18 @@
 # Changelog
 
+## Release Notes: penguins-gui v26.10.26 - 2026-10-26
+
+### 🌍 Penguins Eggs Community Integration
+
+* **Dedicated Community Tab**: Join the global Penguins Eggs Community directly from the GUI to share your public artisan profile (Nickname, Location, Repository/Website URL, Bio up to 200 characters, and optional Social / Fediverse handles).
+* **Single-Checkbox Workflow**: Checking `Join the Penguins Eggs Community` validates, saves (`community.json` & `community.yaml`), and publishes your profile to the Community server (or imports an existing profile if only the Community Token is provided). Unchecking removes your public data from the server while preserving your local fields for editing.
+* **Secure Private Token Storage**: Stores your private Community Token (`egg_pat_...`) exclusively in `~/.ssh/penguins-community.secret` (`0600` permissions), never inside `community.json` or `community.yaml`.
+* **Privacy & Anti-Spam Protection**: Strict validation prevents email addresses in public fields while supporting Fediverse handles (`@user@instance.social`).
+
+### 🏗️ Modular Architecture Refactoring
+
+* **Clean Package Structure**: Reorganized the codebase into focused internal packages (`internal/ui`, `internal/community`, `internal/eggs`, `internal/chef`, `internal/system`, and `internal/builder`).
+
 ## Release Notes: penguins-gui v26.10.21 - 2026-10-21
 
 ### 🖥️ Layout & Interface Improvements
