@@ -21,7 +21,7 @@ document describes how the GUI is organized around its packages.
 ## Current structure
 
 The Fyne presentation layer lives in `internal/ui`, while domain and CLI adapters
-live in `internal/eggs`, `internal/chef`, `internal/census`, and `internal/system`.
+live in `internal/eggs`, `internal/chef`, `internal/community`, and `internal/system`.
 `internal/eggs.CLIAdapter` currently:
 
 1. locates `eggs` in `PATH` and runs `eggs version`;
@@ -112,7 +112,7 @@ cmd/appimage/            AppImage builder CLI
 internal/builder/        native package builder
 internal/eggs/           Eggs CLI adapter, remaster modes, ISO discovery
 internal/chef/           Chef CLI adapter and recipe discovery
-internal/census/         Community profile validation, storage, UUID, and sync
+internal/community/      Community profile validation, storage, UUID, and sync
 internal/system/         Host distro detection, repositories, GRUB, and installers
 internal/ui/             Fyne views, tabs, dialogs, log viewer, and theme scaling
 protocol/                JSON Schemas and examples

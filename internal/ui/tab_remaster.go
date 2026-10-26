@@ -9,7 +9,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/pieroproietti/penguins-gui/internal/census"
+	"github.com/pieroproietti/penguins-gui/internal/community"
 	"github.com/pieroproietti/penguins-gui/internal/eggs"
 )
 
@@ -103,7 +103,7 @@ func (ui *App) buildRemasterTab() *fyne.Container {
 	return container.NewPadded(container.NewBorder(topControls, footer, nil, nil, ui.logView.Scroll))
 }
 
-func (ui *App) updateCommunityStatus(data census.CommunityData) {
+func (ui *App) updateCommunityStatus(data community.CommunityData) {
 	if ui.communityBtn == nil {
 		return
 	}

@@ -1,4 +1,4 @@
-package census
+package community
 
 import (
 	"encoding/json"

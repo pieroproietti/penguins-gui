@@ -12,11 +12,11 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/pieroproietti/penguins-gui/internal/census"
+	"github.com/pieroproietti/penguins-gui/internal/community"
 )
 
 // buildCommunityPanel creates the UI container for the Community configuration panel.
-func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fyne.CanvasObject, func() census.CommunityData) {
+func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) (fyne.CanvasObject, func() community.CommunityData) {
 	checkEnabled := widget.NewCheck("Join the Penguins Eggs Community", nil)
 
 	// Artisan Token (for multi-machine synchronization)
@@ -41,7 +41,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fy
 	bioEntry.Wrapping = fyne.TextWrapWord
 	bioEntry.SetMinRowsVisible(3)
 
-	bioCounterLabel := widget.NewLabel(fmt.Sprintf("0/%d characters", census.MaxBioLength))
+	bioCounterLabel := widget.NewLabel(fmt.Sprintf("0/%d characters", community.MaxBioLength))
 	bioCounterLabel.TextStyle = fyne.TextStyle{Italic: true}
 
 	// 6. Social Networks / Contact (alphabetical order)
@@ -96,7 +96,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fy
 		}
 		statusLabel.SetText("Importing profile from community server...")
 		go func() {
-			imported, err := census.FetchProfileWithTokenData(tok)
+			imported, err := community.FetchProfileWithTokenData(tok)
 			fyne.Do(func() {
 				if err != nil {
 					statusLabel.SetText("⚠️ Import failed: " + err.Error())
@@ -109,7 +109,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fy
 				locationEntry.SetText(imported.Location)
 				sourceURLEntry.SetText(imported.SourceURL)
 				bioEntry.SetText(imported.Bio)
-				bioCounterLabel.SetText(fmt.Sprintf("%d/%d characters", len([]rune(imported.Bio)), census.MaxBioLength))
+				bioCounterLabel.SetText(fmt.Sprintf("%d/%d characters", len([]rune(imported.Bio)), community.MaxBioLength))
 
 				checkFacebook.SetChecked(imported.Socials.Facebook != "")
 				entryFacebook.SetText(imported.Socials.Facebook)
@@ -135,39 +135,39 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fy
 		}()
 	})
 
-	currentData := func() census.CommunityData {
-		socials := census.CommunitySocials{}
+	currentData := func() community.CommunityData {
+		socials := community.CommunitySocials{}
 		if checkFacebook.Checked {
-			socials.Facebook = census.CleanPlatformHandle("facebook", entryFacebook.Text)
+			socials.Facebook = community.CleanPlatformHandle("facebook", entryFacebook.Text)
 		}
 		if checkGitee.Checked {
-			socials.Gitee = census.CleanPlatformHandle("gitee", entryGitee.Text)
+			socials.Gitee = community.CleanPlatformHandle("gitee", entryGitee.Text)
 		}
 		if checkGitHub.Checked {
-			socials.GitHub = census.CleanPlatformHandle("github", entryGitHub.Text)
+			socials.GitHub = community.CleanPlatformHandle("github", entryGitHub.Text)
 		}
 		if checkTelegram.Checked {
-			socials.Telegram = census.CleanPlatformHandle("telegram", entryTelegram.Text)
+			socials.Telegram = community.CleanPlatformHandle("telegram", entryTelegram.Text)
 		}
 		if checkWeChat.Checked {
-			socials.WeChat = census.CleanPlatformHandle("wechat", entryWeChat.Text)
+			socials.WeChat = community.CleanPlatformHandle("wechat", entryWeChat.Text)
 		}
 		if checkWhatsApp.Checked {
-			socials.WhatsApp = census.CleanPlatformHandle("whatsapp", entryWhatsApp.Text)
+			socials.WhatsApp = community.CleanPlatformHandle("whatsapp", entryWhatsApp.Text)
 		}
 		if checkX.Checked {
-			socials.X = census.CleanPlatformHandle("x", entryX.Text)
+			socials.X = community.CleanPlatformHandle("x", entryX.Text)
 		}
 
-		primary := census.ComputePrimaryContact(socials)
+		primary := community.ComputePrimaryContact(socials)
 
-		return census.CommunityData{
+		return community.CommunityData{
 			ID:           currentID,
 			ArtisanToken: strings.TrimSpace(tokenEntry.Text),
 			Enabled:      checkEnabled.Checked,
 			Nickname:     strings.TrimSpace(nicknameEntry.Text),
 			Location:     strings.TrimSpace(locationEntry.Text),
-			SourceURL:    census.CleanSourceURL(sourceURLEntry.Text),
+			SourceURL:    community.CleanSourceURL(sourceURLEntry.Text),
 			Bio:          strings.TrimSpace(bioEntry.Text),
 			Contact:      primary,
 			Socials:      socials,
@@ -183,7 +183,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fy
 			return true
 		}
 		data := currentData()
-		if err := census.ValidateCommunityData(data); err != nil {
+		if err := community.ValidateCommunityData(data); err != nil {
 			validationError.SetText("⚠️ " + err.Error())
 			if saveBtn != nil {
 				saveBtn.Disable()
@@ -343,11 +343,11 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fy
 	// Bio length constraint and visual counter
 	bioEntry.OnChanged = func(s string) {
 		runes := []rune(s)
-		if len(runes) > census.MaxBioLength {
-			bioEntry.SetText(string(runes[:census.MaxBioLength]))
+		if len(runes) > community.MaxBioLength {
+			bioEntry.SetText(string(runes[:community.MaxBioLength]))
 			runes = []rune(bioEntry.Text)
 		}
-		bioCounterLabel.SetText(fmt.Sprintf("%d/%d caratteri", len(runes), census.MaxBioLength))
+		bioCounterLabel.SetText(fmt.Sprintf("%d/%d caratteri", len(runes), community.MaxBioLength))
 		validateInputs()
 	}
 
@@ -365,7 +365,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fy
 			return
 		}
 		data := currentData()
-		if err := census.SaveCommunityData(data); err != nil {
+		if err := community.SaveCommunityData(data); err != nil {
 			dialog.ShowError(fmt.Errorf("impossibile salvare le preferenze locali: %w", err), w)
 			return
 		}
@@ -376,18 +376,18 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fy
 		}
 
 		go func() {
-			err := census.SyncCommunityProfile(data)
+			err := community.SyncCommunityProfile(data)
 			fyne.Do(func() {
 				if err != nil {
 					statusLabel.SetText("⚠️ Salvato localmente, errore server: " + err.Error())
 				} else {
-					saved := census.LoadCommunityData()
+					saved := community.LoadCommunityData()
 					if saved.ArtisanToken != "" {
 						tokenEntry.SetText(saved.ArtisanToken)
 					}
 					currentID = saved.ID
 					if data.Enabled {
-						statusLabel.SetText("✅ Profilo salvato e sincronizzato con successo su " + census.Endpoint())
+						statusLabel.SetText("✅ Profilo salvato e sincronizzato con successo su " + community.Endpoint())
 					} else {
 						statusLabel.SetText("✅ Profilo disattivato e rimosso dal server.")
 					}
@@ -404,7 +404,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fy
 		locationEntry.SetText("")
 		sourceURLEntry.SetText("")
 		bioEntry.SetText("")
-		bioCounterLabel.SetText(fmt.Sprintf("0/%d caratteri", census.MaxBioLength))
+		bioCounterLabel.SetText(fmt.Sprintf("0/%d caratteri", community.MaxBioLength))
 		entryFacebook.SetText("")
 		entryGitee.SetText("")
 		entryGitHub.SetText("")
@@ -420,15 +420,15 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fy
 		checkWhatsApp.SetChecked(false)
 		checkX.SetChecked(false)
 		updateFieldStates()
-		data := census.CommunityData{Enabled: false}
-		_ = census.SaveCommunityData(data)
+		data := community.CommunityData{Enabled: false}
+		_ = community.SaveCommunityData(data)
 		if onUpdate != nil {
 			onUpdate(data)
 		}
 
 		statusLabel.SetText("Rimozione profilo dal server in corso...")
 		go func() {
-			err := census.SyncCommunityProfile(data)
+			err := community.SyncCommunityProfile(data)
 			fyne.Do(func() {
 				if err != nil {
 					statusLabel.SetText("⚠️ Preferenze azzerate localmente, errore server: " + err.Error())
@@ -443,18 +443,18 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fy
 		updateFieldStates()
 		if !checked {
 			data := currentData()
-			_ = census.SaveCommunityData(data)
+			_ = community.SaveCommunityData(data)
 			if onUpdate != nil {
 				onUpdate(data)
 			}
 			go func() {
-				_ = census.SyncCommunityProfile(data)
+				_ = community.SyncCommunityProfile(data)
 			}()
 		}
 	}
 
 	// Load existing configuration
-	initial := census.LoadCommunityData()
+	initial := community.LoadCommunityData()
 	currentID = initial.ID
 	if initial.ArtisanToken != "" {
 		tokenEntry.SetText(initial.ArtisanToken)
@@ -465,7 +465,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fy
 		locationEntry.SetText(initial.Location)
 		sourceURLEntry.SetText(initial.SourceURL)
 		bioEntry.SetText(initial.Bio)
-		bioCounterLabel.SetText(fmt.Sprintf("%d/%d caratteri", len([]rune(initial.Bio)), census.MaxBioLength))
+		bioCounterLabel.SetText(fmt.Sprintf("%d/%d caratteri", len([]rune(initial.Bio)), community.MaxBioLength))
 
 		if initial.Socials.Facebook != "" {
 			checkFacebook.SetChecked(true)
@@ -519,7 +519,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(census.CommunityData)) (fy
 			"Partecipa alla community globale di Penguins Eggs!\n\n"+
 				"Connettiti con altri sviluppatori e artigiani di distribuzioni Linux.\n\n"+
 				"• Nessun indirizzo email viene richiesto o salvato (anti-spam).\n"+
-				"• Il profilo è pubblicato direttamente su "+census.Endpoint()+"\n"+
+				"• Il profilo è pubblicato direttamente su "+community.Endpoint()+"\n"+
 				"• La bio ha un limite massimo di 200 caratteri.\n"+
 				"• I link social sono opzionali e supportano handle Fediverse.",
 			w,

@@ -1,6 +1,6 @@
-// Package census manages community participation profiles, validation, local storage,
-// machine UUID derivation, and synchronization with the penguins-census server.
-package census
+// Package community manages community participation profiles, validation, local storage,
+// machine UUID derivation, and synchronization with the community API.
+package community
 
 import (
 	"os"

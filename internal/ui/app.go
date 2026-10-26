@@ -18,7 +18,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/pieroproietti/penguins-gui/internal/census"
+	"github.com/pieroproietti/penguins-gui/internal/community"
 	"github.com/pieroproietti/penguins-gui/internal/chef"
 	"github.com/pieroproietti/penguins-gui/internal/eggs"
 	"github.com/pieroproietti/penguins-gui/internal/system"
@@ -70,7 +70,7 @@ type App struct {
 	howToBoot        *widget.Button
 	communityBtn     *widget.Button
 	mainTabs         *container.AppTabs
-	getCommunityData func() census.CommunityData
+	getCommunityData func() community.CommunityData
 
 	createISOMenuItem *fyne.MenuItem
 	cookMenuItem      *fyne.MenuItem
@@ -430,10 +430,10 @@ func (ui *App) createISO() {
 						comm := ui.getCommunityData()
 						if comm.Enabled {
 							go func() {
-								if syncErr := census.SyncCommunityProfile(comm); syncErr != nil {
+								if syncErr := community.SyncCommunityProfile(comm); syncErr != nil {
 									ui.logView.Append(fmt.Sprintf("[community] Warning: failed to sync profile to community server: %v\n", syncErr))
 								} else {
-									ui.logView.Append(fmt.Sprintf("[community] Profile successfully published to %s\n", census.Endpoint()))
+									ui.logView.Append(fmt.Sprintf("[community] Profile successfully published to %s\n", community.Endpoint()))
 								}
 							}()
 						}

@@ -1,4 +1,4 @@
-package census
+package community
 
 import (
 	"crypto/sha256"
