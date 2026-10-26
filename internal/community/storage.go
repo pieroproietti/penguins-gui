@@ -64,9 +64,6 @@ func saveCommunitySecret(token string) error {
 	secretPath := GetCommunitySecretPath()
 	trimmed := strings.TrimSpace(token)
 	if trimmed == "" {
-		if err := os.Remove(secretPath); err != nil && !os.IsNotExist(err) {
-			return err
-		}
 		return nil
 	}
 	sshDir := filepath.Dir(secretPath)
@@ -212,56 +209,48 @@ func SaveCommunityData(data CommunityData) error {
 		return err
 	}
 
-	var toSave CommunityData
-	if data.Enabled {
-		socials := CommunitySocials{}
-		if s := CleanPlatformHandle("facebook", data.Socials.Facebook); s != "" {
-			socials.Facebook = s
-		}
-		if s := CleanPlatformHandle("gitee", data.Socials.Gitee); s != "" {
-			socials.Gitee = s
-		}
-		if s := CleanPlatformHandle("github", data.Socials.GitHub); s != "" {
-			socials.GitHub = s
-		}
-		if s := CleanPlatformHandle("telegram", data.Socials.Telegram); s != "" {
-			socials.Telegram = s
-		}
-		if s := CleanPlatformHandle("wechat", data.Socials.WeChat); s != "" {
-			socials.WeChat = s
-		}
-		if s := CleanPlatformHandle("whatsapp", data.Socials.WhatsApp); s != "" {
-			socials.WhatsApp = s
-		}
-		if s := CleanPlatformHandle("x", data.Socials.X); s != "" {
-			socials.X = s
-		}
+	socials := CommunitySocials{}
+	if s := CleanPlatformHandle("facebook", data.Socials.Facebook); s != "" {
+		socials.Facebook = s
+	}
+	if s := CleanPlatformHandle("gitee", data.Socials.Gitee); s != "" {
+		socials.Gitee = s
+	}
+	if s := CleanPlatformHandle("github", data.Socials.GitHub); s != "" {
+		socials.GitHub = s
+	}
+	if s := CleanPlatformHandle("telegram", data.Socials.Telegram); s != "" {
+		socials.Telegram = s
+	}
+	if s := CleanPlatformHandle("wechat", data.Socials.WeChat); s != "" {
+		socials.WeChat = s
+	}
+	if s := CleanPlatformHandle("whatsapp", data.Socials.WhatsApp); s != "" {
+		socials.WhatsApp = s
+	}
+	if s := CleanPlatformHandle("x", data.Socials.X); s != "" {
+		socials.X = s
+	}
 
-		cleanSource := ""
-		if data.SourceURL != "" {
-			cleanSource = CleanSourceURL(data.SourceURL)
-		}
+	cleanSource := ""
+	if data.SourceURL != "" {
+		cleanSource = CleanSourceURL(data.SourceURL)
+	}
 
-		cleanBio := strings.TrimSpace(data.Bio)
-		if len([]rune(cleanBio)) > MaxBioLength {
-			cleanBio = string([]rune(cleanBio)[:MaxBioLength])
-		}
+	cleanBio := strings.TrimSpace(data.Bio)
+	if len([]rune(cleanBio)) > MaxBioLength {
+		cleanBio = string([]rune(cleanBio)[:MaxBioLength])
+	}
 
-		toSave = CommunityData{
-			ID:        strings.TrimSpace(data.ID),
-			Enabled:   true,
-			Nickname:  strings.TrimSpace(data.Nickname),
-			Location:  strings.TrimSpace(data.Location),
-			SourceURL: cleanSource,
-			Bio:       cleanBio,
-			Contact:   ComputePrimaryContact(socials),
-			Socials:   socials,
-		}
-	} else {
-		toSave = CommunityData{
-			ID:      strings.TrimSpace(data.ID),
-			Enabled: false,
-		}
+	toSave := CommunityData{
+		ID:        strings.TrimSpace(data.ID),
+		Enabled:   data.Enabled,
+		Nickname:  strings.TrimSpace(data.Nickname),
+		Location:  strings.TrimSpace(data.Location),
+		SourceURL: cleanSource,
+		Bio:       cleanBio,
+		Contact:   ComputePrimaryContact(socials),
+		Socials:   socials,
 	}
 
 	out, err := json.MarshalIndent(toSave, "", "  ")

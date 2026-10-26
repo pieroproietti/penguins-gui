@@ -400,7 +400,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 	removeBtn := widget.NewButtonWithIcon("Remove My Data from Community", theme.DeleteIcon(), func() {
 		dialog.ShowConfirm(
 			"Remove My Data from Community",
-			"Are you sure you want to permanently remove your profile and public data from the Penguins Community server and clear local settings?",
+			"Are you sure you want to remove your public profile and data from the Penguins Community server?\n\nYour fields and token will remain saved locally on this machine so you can re-enable and publish them again anytime.",
 			func(ok bool) {
 				if !ok {
 					return
@@ -409,28 +409,10 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 				idToDelete := currentID
 
 				checkEnabled.SetChecked(false)
-				tokenEntry.SetText("")
-				currentID = ""
-				nicknameEntry.SetText("")
-				locationEntry.SetText("")
-				sourceURLEntry.SetText("")
-				bioEntry.SetText("")
-				bioCounterLabel.SetText(fmt.Sprintf("0/%d characters", community.MaxBioLength))
-				entryFacebook.SetText("")
-				entryGitee.SetText("")
-				entryGitHub.SetText("")
-				entryTelegram.SetText("")
-				entryWeChat.SetText("")
-				entryWhatsApp.SetText("")
-				entryX.SetText("")
-				checkFacebook.SetChecked(false)
-				checkGitee.SetChecked(false)
-				checkGitHub.SetChecked(false)
-				checkTelegram.SetChecked(false)
-				checkWeChat.SetChecked(false)
-				checkWhatsApp.SetChecked(false)
-				checkX.SetChecked(false)
 				updateFieldStates()
+
+				localDraft := currentData()
+				localDraft.Enabled = false
 
 				statusLabel.SetText("Removing profile from community server...")
 				go func() {
@@ -440,15 +422,15 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 						Enabled:      false,
 					}
 					err := community.SyncCommunityProfile(delData)
-					_ = community.SaveCommunityData(community.CommunityData{Enabled: false})
+					_ = community.SaveCommunityData(localDraft)
 					fyne.Do(func() {
 						if onUpdate != nil {
-							onUpdate(community.CommunityData{Enabled: false})
+							onUpdate(localDraft)
 						}
 						if err != nil {
-							statusLabel.SetText("⚠️ Local data cleared, server error: " + err.Error())
+							statusLabel.SetText("⚠️ Disabled locally, server error: " + err.Error())
 						} else {
-							statusLabel.SetText("✅ Profile and data removed from the community server.")
+							statusLabel.SetText("✅ Data removed from community server. Check 'Join the Penguins Eggs Community' and click 'Save / Update' to publish again.")
 						}
 					})
 				}()
@@ -461,53 +443,48 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 		updateFieldStates()
 	}
 
-	// Load existing configuration
+	// Load existing configuration (populate fields even when disabled so user can easily re-enable)
 	initial := community.LoadCommunityData()
 	currentID = initial.ID
 	if initial.ArtisanToken != "" {
 		tokenEntry.SetText(initial.ArtisanToken)
 	}
-	if initial.Enabled {
-		checkEnabled.SetChecked(true)
-		nicknameEntry.SetText(initial.Nickname)
-		locationEntry.SetText(initial.Location)
-		sourceURLEntry.SetText(initial.SourceURL)
-		bioEntry.SetText(initial.Bio)
-		bioCounterLabel.SetText(fmt.Sprintf("%d/%d characters", len([]rune(initial.Bio)), community.MaxBioLength))
+	nicknameEntry.SetText(initial.Nickname)
+	locationEntry.SetText(initial.Location)
+	sourceURLEntry.SetText(initial.SourceURL)
+	bioEntry.SetText(initial.Bio)
+	bioCounterLabel.SetText(fmt.Sprintf("%d/%d characters", len([]rune(initial.Bio)), community.MaxBioLength))
 
-		if initial.Socials.Facebook != "" {
-			checkFacebook.SetChecked(true)
-			entryFacebook.SetText(initial.Socials.Facebook)
-		}
-		if initial.Socials.Gitee != "" {
-			checkGitee.SetChecked(true)
-			entryGitee.SetText(initial.Socials.Gitee)
-		}
-		if initial.Socials.GitHub != "" {
-			checkGitHub.SetChecked(true)
-			entryGitHub.SetText(initial.Socials.GitHub)
-		}
-		if initial.Socials.Telegram != "" {
-			checkTelegram.SetChecked(true)
-			entryTelegram.SetText(initial.Socials.Telegram)
-		}
-		if initial.Socials.WeChat != "" {
-			checkWeChat.SetChecked(true)
-			entryWeChat.SetText(initial.Socials.WeChat)
-		}
-		if initial.Socials.WhatsApp != "" {
-			checkWhatsApp.SetChecked(true)
-			entryWhatsApp.SetText(initial.Socials.WhatsApp)
-		}
-		if initial.Socials.X != "" {
-			checkX.SetChecked(true)
-			entryX.SetText(initial.Socials.X)
-		}
-		updateFieldStates()
-	} else {
-		checkEnabled.SetChecked(false)
-		updateFieldStates()
+	if initial.Socials.Facebook != "" {
+		checkFacebook.SetChecked(true)
+		entryFacebook.SetText(initial.Socials.Facebook)
 	}
+	if initial.Socials.Gitee != "" {
+		checkGitee.SetChecked(true)
+		entryGitee.SetText(initial.Socials.Gitee)
+	}
+	if initial.Socials.GitHub != "" {
+		checkGitHub.SetChecked(true)
+		entryGitHub.SetText(initial.Socials.GitHub)
+	}
+	if initial.Socials.Telegram != "" {
+		checkTelegram.SetChecked(true)
+		entryTelegram.SetText(initial.Socials.Telegram)
+	}
+	if initial.Socials.WeChat != "" {
+		checkWeChat.SetChecked(true)
+		entryWeChat.SetText(initial.Socials.WeChat)
+	}
+	if initial.Socials.WhatsApp != "" {
+		checkWhatsApp.SetChecked(true)
+		entryWhatsApp.SetText(initial.Socials.WhatsApp)
+	}
+	if initial.Socials.X != "" {
+		checkX.SetChecked(true)
+		entryX.SetText(initial.Socials.X)
+	}
+	checkEnabled.SetChecked(initial.Enabled)
+	updateFieldStates()
 
 	// Socials Form in strictly alphabetical order:
 	// Facebook, Gitee, GitHub, Telegram, WeChat, WhatsApp, X
