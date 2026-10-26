@@ -160,7 +160,7 @@ func TestCookAndBootISOButtons(t *testing.T) {
 
 func TestBuildCommunityPanel(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
 
 	w := test.NewWindow(nil)
 	defer w.Close()

@@ -9,6 +9,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const CommunitySecretFileName = "penguins-community.secret"
+
 // getEggsConfigDir returns the user configuration directory for penguins-eggs.
 func getEggsConfigDir() (string, error) {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
@@ -34,8 +36,51 @@ func getEggsConfigPath() string {
 	return filepath.Join(dir, "community.json")
 }
 
-// LoadCommunityData loads community preferences from community.json or community.yaml.
+// GetCommunitySecretPath returns the path to ~/.ssh/penguins-community.secret.
+func GetCommunitySecretPath() string {
+	if custom := strings.TrimSpace(os.Getenv("EGGS_COMMUNITY_SECRET_PATH")); custom != "" {
+		return custom
+	}
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		// In isolated test environments using XDG_CONFIG_HOME, place .ssh sibling to config dir
+		return filepath.Join(filepath.Dir(xdg), ".ssh", CommunitySecretFileName)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join("/root", ".ssh", CommunitySecretFileName)
+	}
+	return filepath.Join(home, ".ssh", CommunitySecretFileName)
+}
+
+func loadCommunitySecret() string {
+	data, err := os.ReadFile(GetCommunitySecretPath())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+func saveCommunitySecret(token string) error {
+	secretPath := GetCommunitySecretPath()
+	trimmed := strings.TrimSpace(token)
+	if trimmed == "" {
+		if err := os.Remove(secretPath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	sshDir := filepath.Dir(secretPath)
+	if err := os.MkdirAll(sshDir, 0700); err != nil {
+		return err
+	}
+	return os.WriteFile(secretPath, []byte(trimmed+"\n"), 0600)
+}
+
+// LoadCommunityData loads community preferences from community.json or community.yaml,
+// and loads the private Community Token from ~/.ssh/penguins-community.secret.
 func LoadCommunityData() CommunityData {
+	secretToken := loadCommunitySecret()
+
 	userPath := getEggsConfigPath()
 	candidates := []string{
 		userPath,
@@ -57,20 +102,37 @@ func LoadCommunityData() CommunityData {
 			}
 		}
 
+		var commMap map[string]interface{}
 		var commBytes []byte
 		if commRaw, ok := root["community"]; ok && commRaw != nil {
 			commBytes, err = json.Marshal(commRaw)
 			if err != nil {
 				continue
 			}
+			_ = json.Unmarshal(commBytes, &commMap)
 		} else if _, ok := root["enabled"]; ok {
 			commBytes = data
+			commMap = root
 		} else {
 			continue
 		}
 
 		var comm CommunityData
 		if err := json.Unmarshal(commBytes, &comm); err == nil {
+			// Migrate legacy artisan_token from config file into ~/.ssh/penguins-community.secret
+			var legacyTok string
+			if commMap != nil {
+				if rawTok, ok := commMap["artisan_token"].(string); ok {
+					legacyTok = strings.TrimSpace(rawTok)
+				}
+			}
+			if secretToken != "" {
+				comm.ArtisanToken = secretToken
+			} else if legacyTok != "" {
+				comm.ArtisanToken = legacyTok
+				_ = saveCommunitySecret(legacyTok)
+			}
+
 			// Backward compatibility: map legacy contact/bio fields if socials are missing
 			if comm.Socials.Telegram == "" && (strings.HasPrefix(comm.Contact, "@") || strings.Contains(comm.Contact, "t.me/")) {
 				comm.Socials.Telegram = comm.Contact
@@ -122,21 +184,31 @@ func LoadCommunityData() CommunityData {
 			// Compute canonical primary contact without platform favoritism
 			comm.Contact = ComputePrimaryContact(comm.Socials)
 
+			// If legacy token was present in the public config file, rewrite config without it
+			if legacyTok != "" {
+				_ = SaveCommunityData(comm)
+			}
+
 			return comm
 		}
 	}
 
 	return CommunityData{
-		Enabled: false,
+		ArtisanToken: secretToken,
+		Enabled:      false,
 	}
 }
 
-// SaveCommunityData persists community preferences into community.json.
-// If enabled is false, community settings are marked as disabled.
+// SaveCommunityData persists public community preferences into community.json and community.yaml,
+// while storing the secret Community Token exclusively in ~/.ssh/penguins-community.secret (0600).
 func SaveCommunityData(data CommunityData) error {
 	path := getEggsConfigPath()
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	if err := saveCommunitySecret(data.ArtisanToken); err != nil {
 		return err
 	}
 
@@ -176,21 +248,19 @@ func SaveCommunityData(data CommunityData) error {
 		}
 
 		toSave = CommunityData{
-			ID:           strings.TrimSpace(data.ID),
-			ArtisanToken: strings.TrimSpace(data.ArtisanToken),
-			Enabled:      true,
-			Nickname:     strings.TrimSpace(data.Nickname),
-			Location:     strings.TrimSpace(data.Location),
-			SourceURL:    cleanSource,
-			Bio:          cleanBio,
-			Contact:      ComputePrimaryContact(socials),
-			Socials:      socials,
+			ID:        strings.TrimSpace(data.ID),
+			Enabled:   true,
+			Nickname:  strings.TrimSpace(data.Nickname),
+			Location:  strings.TrimSpace(data.Location),
+			SourceURL: cleanSource,
+			Bio:       cleanBio,
+			Contact:   ComputePrimaryContact(socials),
+			Socials:   socials,
 		}
 	} else {
 		toSave = CommunityData{
-			ID:           strings.TrimSpace(data.ID),
-			ArtisanToken: strings.TrimSpace(data.ArtisanToken),
-			Enabled:      false,
+			ID:      strings.TrimSpace(data.ID),
+			Enabled: false,
 		}
 	}
 
@@ -204,7 +274,7 @@ func SaveCommunityData(data CommunityData) error {
 		return err
 	}
 
-	// Also persist community settings into community.yaml in user configuration directory (without email)
+	// Also persist community settings into community.yaml in user configuration directory (without email or token)
 	saveToCommunityYAML(filepath.Join(dir, "community.yaml"), toSave)
 
 	return nil

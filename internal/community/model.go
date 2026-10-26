@@ -26,9 +26,11 @@ type CommunitySocials struct {
 
 // CommunityData represents user preferences for community participation.
 // Email is strictly forbidden to prevent spam.
+// The secret Community Token is stored separately in ~/.ssh/penguins-community.secret
+// and is never serialized into community.json or community.yaml.
 type CommunityData struct {
 	ID           string           `yaml:"id,omitempty" json:"id,omitempty"`
-	ArtisanToken string           `yaml:"artisan_token,omitempty" json:"artisan_token,omitempty"`
+	ArtisanToken string           `yaml:"-" json:"-"`
 	Enabled      bool             `yaml:"enabled" json:"enabled"`
 	Nickname     string           `yaml:"nickname,omitempty" json:"nickname,omitempty"`
 	Location     string           `yaml:"location,omitempty" json:"location,omitempty"`

@@ -232,7 +232,7 @@ func TestValidateCommunityData(t *testing.T) {
 
 func TestSaveAndLoadCommunityData(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
 
 	initial := LoadCommunityData()
 	if initial.Enabled {
@@ -260,12 +260,12 @@ func TestSaveAndLoadCommunityData(t *testing.T) {
 		t.Fatalf("SaveCommunityData failed: %v", err)
 	}
 
-	cfgFile := filepath.Join(tmpDir, "penguins-eggs", "community.json")
+	cfgFile := filepath.Join(tmpDir, "config", "penguins-eggs", "community.json")
 	if _, err := os.Stat(cfgFile); err != nil {
 		t.Fatalf("community.json was not created: %v", err)
 	}
 
-	yamlFile := filepath.Join(tmpDir, "penguins-eggs", "community.yaml")
+	yamlFile := filepath.Join(tmpDir, "config", "penguins-eggs", "community.yaml")
 	yamlBytes, err := os.ReadFile(yamlFile)
 	if err != nil {
 		t.Fatalf("community.yaml was not created: %v", err)
@@ -316,9 +316,9 @@ func TestEmailNeverExposedInContact(t *testing.T) {
 
 func TestBackwardCompatibilityWithMalformedCommunityYaml(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
 
-	cfgDir := filepath.Join(tmpDir, "penguins-eggs")
+	cfgDir := filepath.Join(tmpDir, "config", "penguins-eggs")
 	_ = os.MkdirAll(cfgDir, 0755)
 
 	malformedYAML := []byte(`community:
@@ -371,7 +371,7 @@ func TestBackwardCompatibilityWithMalformedCommunityYaml(t *testing.T) {
 
 func TestSyncCommunityProfile(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
 
 	var lastMethod string
 	var lastPath string
@@ -448,7 +448,7 @@ func TestGetMachineUUID(t *testing.T) {
 
 func TestTokenHeaderAndAutoCapture(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
 
 	var lastHeaders http.Header
 	var responseJSON string
@@ -474,12 +474,34 @@ func TestTokenHeaderAndAutoCapture(t *testing.T) {
 		t.Fatalf("SyncCommunityProfile creation failed: %v", err)
 	}
 
+	// Verify token was auto-captured and saved to ~/.ssh/penguins-community.secret (and NOT in community.json/community.yaml)
 	saved := LoadCommunityData()
 	if saved.ArtisanToken != "egg_pat_generated987" {
 		t.Errorf("expected auto-captured token 'egg_pat_generated987', got %q", saved.ArtisanToken)
 	}
 	if saved.ID != "distro-artist" {
 		t.Errorf("expected auto-captured ID 'distro-artist', got %q", saved.ID)
+	}
+
+	secretBytes, err := os.ReadFile(GetCommunitySecretPath())
+	if err != nil {
+		t.Fatalf("expected secret file %s to exist: %v", GetCommunitySecretPath(), err)
+	}
+	if strings.TrimSpace(string(secretBytes)) != "egg_pat_generated987" {
+		t.Errorf("unexpected secret file content: %q", string(secretBytes))
+	}
+	secretInfo, err := os.Stat(GetCommunitySecretPath())
+	if err != nil || secretInfo.Mode().Perm() != 0600 {
+		t.Errorf("expected 0600 permissions on secret file, got %v", secretInfo.Mode().Perm())
+	}
+
+	jsonBytes, _ := os.ReadFile(filepath.Join(tmpDir, "config", "penguins-eggs", "community.json"))
+	if strings.Contains(string(jsonBytes), "egg_pat_") || strings.Contains(string(jsonBytes), "artisan_token") {
+		t.Errorf("community.json must NOT contain the secret token: %s", string(jsonBytes))
+	}
+	yamlBytes, _ := os.ReadFile(filepath.Join(tmpDir, "config", "penguins-eggs", "community.yaml"))
+	if strings.Contains(string(yamlBytes), "egg_pat_") || strings.Contains(string(yamlBytes), "artisan_token") {
+		t.Errorf("community.yaml must NOT contain the secret token: %s", string(yamlBytes))
 	}
 
 	responseJSON = `{"status":"ok","id":"distro-artist"}`
@@ -506,7 +528,7 @@ func TestTokenHeaderAndAutoCapture(t *testing.T) {
 
 func TestFetchProfileWithToken(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
 
 	var lastToken string
 

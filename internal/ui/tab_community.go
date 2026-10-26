@@ -19,9 +19,9 @@ import (
 func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) (fyne.CanvasObject, func() community.CommunityData) {
 	checkEnabled := widget.NewCheck("Join the Penguins Eggs Community", nil)
 
-	// Artisan Token (for multi-machine synchronization)
+	// Community Token (stored in ~/.ssh/penguins-community.secret for multi-machine synchronization)
 	tokenEntry := widget.NewPasswordEntry()
-	tokenEntry.SetPlaceHolder("Personal Artisan Token (egg_pat_...) - Optional / Auto-generated")
+	tokenEntry.SetPlaceHolder("Community Token (egg_pat_...) — saved in ~/.ssh/penguins-community.secret")
 
 	// 2. Nickname / Public handle
 	nicknameEntry := widget.NewEntry()
@@ -91,7 +91,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 	importTokenBtn := widget.NewButtonWithIcon("Import with Token", theme.DownloadIcon(), func() {
 		tok := strings.TrimSpace(tokenEntry.Text)
 		if tok == "" {
-			dialog.ShowError(errors.New("insert an Artisan Token to import an existing profile"), w)
+			dialog.ShowError(errors.New("insert a Community Token to import an existing profile"), w)
 			return
 		}
 		statusLabel.SetText("Importing profile from community server...")
@@ -541,7 +541,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 		checkEnabled,
 		widget.NewSeparator(),
 
-		widget.NewLabelWithStyle("Artisan Token (optional / multi-machine sync):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle("Community Token (~/.ssh/penguins-community.secret):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		tokenRow,
 		widget.NewSeparator(),
 
