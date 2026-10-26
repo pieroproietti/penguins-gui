@@ -12,9 +12,9 @@ func DownloadChef(chefRoot string, logFn func(string)) error {
 	chefPath, err := exec.LookPath("chef")
 	if err == nil {
 		if logFn != nil {
-			logFn("$ chef get\n")
+			logFn("$ chef cook --pull\n")
 		}
-		cmd := exec.Command(chefPath, "get")
+		cmd := exec.Command(chefPath, "cook", "--pull")
 		out, err := cmd.CombinedOutput()
 		if logFn != nil && len(out) > 0 {
 			logFn(string(out) + "\n")
@@ -24,7 +24,7 @@ func DownloadChef(chefRoot string, logFn func(string)) error {
 			return nil
 		}
 		if logFn != nil {
-			logFn(fmt.Sprintf("chef get exited with error (%v), attempting git clone fallback...\n", err))
+			logFn(fmt.Sprintf("chef cook --pull exited with error (%v), attempting git clone fallback...\n", err))
 		}
 	}
 

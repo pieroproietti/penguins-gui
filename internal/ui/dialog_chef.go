@@ -16,7 +16,7 @@ import (
 	"github.com/pieroproietti/penguins-gui/internal/chef"
 )
 
-// showCookDialog opens the interactive GUI recipe picker (apply.picker).
+// showCookDialog opens the interactive GUI recipe picker (cook.picker).
 func showCookDialog(
 	parent fyne.Window,
 	chefPath string,
@@ -42,7 +42,7 @@ func showCookDialog(
 	}
 
 	if len(recipes) == 0 {
-		dialog.ShowInformation("No Recipes Found", "No recipes found in "+chefRoot+". Run Update Recipes or 'chef get' to download them.", parent)
+		dialog.ShowInformation("No Recipes Found", "No recipes found in "+chefRoot+". Run Update Recipes or 'chef cook --pull' to download them.", parent)
 		return
 	}
 
@@ -65,7 +65,7 @@ func showCookDialog(
 	previewScroll := container.NewScroll(previewGrid)
 	previewScroll.SetMinSize(fyne.NewSize(460, 280))
 
-	btnApply := widget.NewButtonWithIcon("Apply Recipe", theme.ConfirmIcon(), nil)
+	btnApply := widget.NewButtonWithIcon("Cook Recipe", theme.ConfirmIcon(), nil)
 	btnApply.Importance = widget.HighImportance
 	btnApply.Disable()
 
@@ -127,7 +127,7 @@ func showCookDialog(
 
 		titleLabel.SetText("Category: " + catName + "/")
 		categoryBadge.SetText(fmt.Sprintf("%d recipes available in this category", count))
-		descLabel.SetText("Select an individual recipe to view its definition and apply it.")
+		descLabel.SetText("Select an individual recipe to view its definition and cook it.")
 		descLabel.Show()
 		profilesLabel.Hide()
 		pathLabel.SetText("")
@@ -145,7 +145,7 @@ func showCookDialog(
 				sb.WriteString(fmt.Sprintf("#       (%s)\n", r.Description))
 			}
 		}
-		sb.WriteString("#\n# Select a recipe from the tree on the left to preview and apply.\n")
+		sb.WriteString("#\n# Select a recipe from the tree on the left to preview and cook.\n")
 		previewGrid.SetText(sb.String())
 		previewScroll.ScrollToTop()
 		statusLabel.SetText("Category selected: " + catName)
@@ -298,9 +298,9 @@ func showCookDialog(
 		runCommand(
 			"Cook: "+r.Name,
 			chefPath,
-			[]string{"apply", r.Path},
-			fmt.Sprintf("Apply recipe %q (%s)?\n\nFile: %s\n\nThis will install packages and configure the system according to the recipe.", r.Name, r.Category, r.Path),
-			fmt.Sprintf("Recipe %q applied successfully.", r.Name),
+			[]string{"cook", r.Path},
+			fmt.Sprintf("Cook recipe %q (%s)?\n\nFile: %s\n\nThis will install packages and configure the system according to the recipe.", r.Name, r.Category, r.Path),
+			fmt.Sprintf("Recipe %q cooked successfully.", r.Name),
 		)
 	}
 
@@ -310,9 +310,9 @@ func showCookDialog(
 		}
 		r := *selectedRecipe
 		d.Hide()
-		appendLog(fmt.Sprintf("$ chef apply --dry-run %s\n\n", r.Path))
+		appendLog(fmt.Sprintf("$ chef cook --dry-run %s\n\n", r.Path))
 		go func() {
-			cmd := exec.Command(chefPath, "apply", "--dry-run", r.Path)
+			cmd := exec.Command(chefPath, "cook", "--dry-run", r.Path)
 			out, err := cmd.CombinedOutput()
 			fyne.Do(func() {
 				appendLog(string(out) + "\n")
