@@ -248,7 +248,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 				entryX.Disable()
 			}
 
-			statusLabel.SetText("Partecipazione attiva: compila i campi e premi Salva per sincronizzare il profilo con la community.")
+			statusLabel.SetText("Community participation active: fill in the fields and click 'Save / Update Community Profile' to publish.")
 		} else {
 			nicknameEntry.Disable()
 			locationEntry.Disable()
@@ -269,7 +269,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 			entryWhatsApp.Disable()
 			entryX.Disable()
 			validationError.SetText("")
-			statusLabel.SetText("Partecipazione alla community disattivata.")
+			statusLabel.SetText("Community participation disabled on this machine.")
 		}
 		validateInputs()
 	}
@@ -347,7 +347,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 			bioEntry.SetText(string(runes[:community.MaxBioLength]))
 			runes = []rune(bioEntry.Text)
 		}
-		bioCounterLabel.SetText(fmt.Sprintf("%d/%d caratteri", len(runes), community.MaxBioLength))
+		bioCounterLabel.SetText(fmt.Sprintf("%d/%d characters", len(runes), community.MaxBioLength))
 		validateInputs()
 	}
 
@@ -359,98 +359,106 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 	entryWhatsApp.OnChanged = onTextChange
 	entryX.OnChanged = onTextChange
 
-	saveBtn = widget.NewButtonWithIcon("Salva / Aggiorna profilo Community", theme.DocumentSaveIcon(), func() {
+	saveBtn = widget.NewButtonWithIcon("Save / Update Community Profile", theme.DocumentSaveIcon(), func() {
 		if checkEnabled.Checked && !validateInputs() {
-			dialog.ShowError(errors.New("correggi gli errori di validazione prima di salvare"), w)
+			dialog.ShowError(errors.New("please fix validation errors before saving"), w)
 			return
 		}
 		data := currentData()
 		if err := community.SaveCommunityData(data); err != nil {
-			dialog.ShowError(fmt.Errorf("impossibile salvare le preferenze locali: %w", err), w)
+			dialog.ShowError(fmt.Errorf("failed to save local preferences: %w", err), w)
 			return
 		}
 
-		statusLabel.SetText("Sincronizzazione in corso con il server community...")
 		if onUpdate != nil {
 			onUpdate(data)
 		}
 
+		if !data.Enabled {
+			statusLabel.SetText("✅ Community participation disabled locally.")
+			return
+		}
+
+		statusLabel.SetText("Synchronizing profile with community server...")
 		go func() {
 			err := community.SyncCommunityProfile(data)
 			fyne.Do(func() {
 				if err != nil {
-					statusLabel.SetText("⚠️ Salvato localmente, errore server: " + err.Error())
+					statusLabel.SetText("⚠️ Saved locally, server error: " + err.Error())
 				} else {
 					saved := community.LoadCommunityData()
 					if saved.ArtisanToken != "" {
 						tokenEntry.SetText(saved.ArtisanToken)
 					}
 					currentID = saved.ID
-					if data.Enabled {
-						statusLabel.SetText("✅ Profilo salvato e sincronizzato con successo su " + community.Endpoint())
-					} else {
-						statusLabel.SetText("✅ Profilo disattivato e rimosso dal server.")
-					}
+					statusLabel.SetText("✅ Profile saved and published to " + community.Endpoint())
 				}
 			})
 		}()
 	})
 
-	clearBtn := widget.NewButtonWithIcon("Disabilita / Cancella Campi", theme.ContentClearIcon(), func() {
-		checkEnabled.SetChecked(false)
-		tokenEntry.SetText("")
-		currentID = ""
-		nicknameEntry.SetText("")
-		locationEntry.SetText("")
-		sourceURLEntry.SetText("")
-		bioEntry.SetText("")
-		bioCounterLabel.SetText(fmt.Sprintf("0/%d caratteri", community.MaxBioLength))
-		entryFacebook.SetText("")
-		entryGitee.SetText("")
-		entryGitHub.SetText("")
-		entryTelegram.SetText("")
-		entryWeChat.SetText("")
-		entryWhatsApp.SetText("")
-		entryX.SetText("")
-		checkFacebook.SetChecked(false)
-		checkGitee.SetChecked(false)
-		checkGitHub.SetChecked(false)
-		checkTelegram.SetChecked(false)
-		checkWeChat.SetChecked(false)
-		checkWhatsApp.SetChecked(false)
-		checkX.SetChecked(false)
-		updateFieldStates()
-		data := community.CommunityData{Enabled: false}
-		_ = community.SaveCommunityData(data)
-		if onUpdate != nil {
-			onUpdate(data)
-		}
-
-		statusLabel.SetText("Rimozione profilo dal server in corso...")
-		go func() {
-			err := community.SyncCommunityProfile(data)
-			fyne.Do(func() {
-				if err != nil {
-					statusLabel.SetText("⚠️ Preferenze azzerate localmente, errore server: " + err.Error())
-				} else {
-					statusLabel.SetText("✅ Profilo disabilitato e rimosso dal server.")
+	removeBtn := widget.NewButtonWithIcon("Remove My Data from Community", theme.DeleteIcon(), func() {
+		dialog.ShowConfirm(
+			"Remove My Data from Community",
+			"Are you sure you want to permanently remove your profile and public data from the Penguins Community server and clear local settings?",
+			func(ok bool) {
+				if !ok {
+					return
 				}
-			})
-		}()
+				tok := strings.TrimSpace(tokenEntry.Text)
+				idToDelete := currentID
+
+				checkEnabled.SetChecked(false)
+				tokenEntry.SetText("")
+				currentID = ""
+				nicknameEntry.SetText("")
+				locationEntry.SetText("")
+				sourceURLEntry.SetText("")
+				bioEntry.SetText("")
+				bioCounterLabel.SetText(fmt.Sprintf("0/%d characters", community.MaxBioLength))
+				entryFacebook.SetText("")
+				entryGitee.SetText("")
+				entryGitHub.SetText("")
+				entryTelegram.SetText("")
+				entryWeChat.SetText("")
+				entryWhatsApp.SetText("")
+				entryX.SetText("")
+				checkFacebook.SetChecked(false)
+				checkGitee.SetChecked(false)
+				checkGitHub.SetChecked(false)
+				checkTelegram.SetChecked(false)
+				checkWeChat.SetChecked(false)
+				checkWhatsApp.SetChecked(false)
+				checkX.SetChecked(false)
+				updateFieldStates()
+
+				statusLabel.SetText("Removing profile from community server...")
+				go func() {
+					delData := community.CommunityData{
+						ID:           idToDelete,
+						ArtisanToken: tok,
+						Enabled:      false,
+					}
+					err := community.SyncCommunityProfile(delData)
+					_ = community.SaveCommunityData(community.CommunityData{Enabled: false})
+					fyne.Do(func() {
+						if onUpdate != nil {
+							onUpdate(community.CommunityData{Enabled: false})
+						}
+						if err != nil {
+							statusLabel.SetText("⚠️ Local data cleared, server error: " + err.Error())
+						} else {
+							statusLabel.SetText("✅ Profile and data removed from the community server.")
+						}
+					})
+				}()
+			},
+			w,
+		)
 	})
 
 	checkEnabled.OnChanged = func(checked bool) {
 		updateFieldStates()
-		if !checked {
-			data := currentData()
-			_ = community.SaveCommunityData(data)
-			if onUpdate != nil {
-				onUpdate(data)
-			}
-			go func() {
-				_ = community.SyncCommunityProfile(data)
-			}()
-		}
 	}
 
 	// Load existing configuration
@@ -465,7 +473,7 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 		locationEntry.SetText(initial.Location)
 		sourceURLEntry.SetText(initial.SourceURL)
 		bioEntry.SetText(initial.Bio)
-		bioCounterLabel.SetText(fmt.Sprintf("%d/%d caratteri", len([]rune(initial.Bio)), community.MaxBioLength))
+		bioCounterLabel.SetText(fmt.Sprintf("%d/%d characters", len([]rune(initial.Bio)), community.MaxBioLength))
 
 		if initial.Socials.Facebook != "" {
 			checkFacebook.SetChecked(true)
@@ -516,17 +524,17 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 	infoBtn := widget.NewButtonWithIcon("Info", theme.InfoIcon(), func() {
 		dialog.ShowInformation(
 			"Penguins Community",
-			"Partecipa alla community globale di Penguins Eggs!\n\n"+
-				"Connettiti con altri sviluppatori e artigiani di distribuzioni Linux.\n\n"+
-				"• Nessun indirizzo email viene richiesto o salvato (anti-spam).\n"+
-				"• Il profilo è pubblicato direttamente su "+community.Endpoint()+"\n"+
-				"• La bio ha un limite massimo di 200 caratteri.\n"+
-				"• I link social sono opzionali e supportano handle Fediverse.",
+			"Join the global Penguins Eggs Community!\n\n"+
+				"Connect with other Linux distribution developers and artisans.\n\n"+
+				"• No email address is requested or stored (anti-spam).\n"+
+				"• Your private token is stored in ~/.ssh/penguins-community.secret (never in community.json/yaml).\n"+
+				"• Bio has a maximum length of 200 characters.\n"+
+				"• Social links are optional and support Fediverse handles.",
 			w,
 		)
 	})
 
-	btnRow := container.NewHBox(saveBtn, clearBtn, infoBtn, layout.NewSpacer())
+	btnRow := container.NewHBox(saveBtn, removeBtn, infoBtn, layout.NewSpacer())
 
 	topBar := container.NewVBox(
 		btnRow,

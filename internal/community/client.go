@@ -115,6 +115,9 @@ func SyncCommunityProfile(data CommunityData) error {
 	if data.ID != "" {
 		payloadMap["id"] = strings.TrimSpace(data.ID)
 	}
+	if tok != "" {
+		payloadMap["token"] = tok
+	}
 
 	payloadBytes, err := json.Marshal(payloadMap)
 	if err != nil {
