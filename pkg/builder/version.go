@@ -1,4 +1,3 @@
-// Version rules adapted from penguins-tailor/pkg/builder/u_get-git-version.go.
 // Copyright 2026 Piero Proietti <piero.proietti@gmail.com>.
 package builder
 

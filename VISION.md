@@ -19,15 +19,15 @@ and launching the appropriate installer.
 
 ### Independent tools
 
-Penguins GUI, Penguins' Eggs, and Krill must remain independent programs.
-(Penguins Tailor remains a dedicated CLI/TUI tool).
+Penguins GUI, Penguins' Eggs, Penguins Chef, Penguins Census, and Krill must remain independent programs.
 
 Each tool owns one clear responsibility:
 
-- **Penguins Tailor** prepares and customizes a naked/headless system from the console (CLI/TUI). Because it runs before any desktop or display server is installed, it is intentionally excluded from Penguins GUI.
 - **Penguins' Eggs** remasters the running system into a live, bootable image.
+- **Penguins Chef** applies system and desktop configuration recipes.
+- **Penguins Census** manages community participation and statistics.
 - **Krill** installs a live system onto storage.
-- **Penguins GUI** discovers, presents, and coordinates the desktop-ready tools (primarily Eggs and later Krill).
+- **Penguins GUI** discovers, presents, and coordinates the desktop-ready tools.
 
 The dependency direction is always from the GUI toward the tools:
 
@@ -115,14 +115,6 @@ The remaster view will remain the central feature. It may progressively add:
 - recovery actions after an interrupted or failed remaster;
 - clear separation between observed facts, warnings, and suggested actions.
 
-### Tailor (out of scope)
-
-Penguins Tailor is intentionally not integrated into Penguins GUI. Tailor is
-designed to dress and configure naked Linux systems (often lacking Xorg/Wayland
-and any desktop environment). Since a graphical interface cannot run on a naked
-system, Tailor belongs naturally and exclusively to the terminal (CLI/TUI). Once
-a desktop is installed and running, the tailoring phase is already complete.
-
 ### Installation tools
 
 Penguins GUI may detect and launch available installers such as Calamares or
@@ -189,8 +181,7 @@ destructive actions.
 Penguins GUI should be distributed as native packages while keeping the source
 project and build process independent from the other Penguins tools.
 
-Packaging may follow the proven builder structure used by Penguins Tailor,
-adapted for a graphical Fyne application. Packages should install at least:
+Packaging uses a dedicated Go builder adapted for a graphical Fyne application. Packages should install at least:
 
 ```text
 /usr/bin/penguins-gui
@@ -210,8 +201,7 @@ companion, while Krill and AI support remain optional integrations.
 
 Penguins GUI is not intended to:
 
-- replace the command-line interfaces of Eggs or Krill;
-- support Penguins Tailor, which is designed exclusively for naked console environments;
+- replace the command-line interfaces of Eggs, Chef, or Krill;
 - merge the Penguins projects into a single monolithic application;
 - maintain a second implementation of remastering, customization, encryption,
   partitioning, or installation logic;

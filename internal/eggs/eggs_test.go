@@ -29,6 +29,39 @@ func TestRemasterArgs(t *testing.T) {
 	}
 }
 
+func TestModeDescription(t *testing.T) {
+	tests := []struct {
+		mode RemasterMode
+		want string
+	}{
+		{
+			mode: ModeStandard,
+			want: "Create a clean live system without user accounts or personal data.",
+		},
+		{
+			mode: ModeClone,
+			want: "Include users, configurations and data in an unencrypted clone.",
+		},
+		{
+			mode: ModeEncrypted,
+			want: "Create an encrypted clone; passphrase and parameters are requested by Eggs.",
+		},
+	}
+
+	for _, tt := range tests {
+		got := ModeDescription(tt.mode)
+		if got != tt.want {
+			t.Errorf("ModeDescription(%q) = %q, want %q", tt.mode, got, tt.want)
+		}
+	}
+}
+
+func TestHumanSize(t *testing.T) {
+	if got := HumanSize(3 * 1024 * 1024); got != "3.0 MiB" {
+		t.Fatalf("HumanSize() = %q", got)
+	}
+}
+
 func TestNewestISO(t *testing.T) {
 	root := t.TempDir()
 	oldPath := filepath.Join(root, "old.iso")

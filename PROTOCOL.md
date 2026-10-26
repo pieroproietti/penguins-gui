@@ -15,14 +15,10 @@ The GUI must orchestrate the tools through stable public interfaces without
 importing their internal code:
 
 - Eggs remasters the running system into an ISO;
+- Chef applies configuration and desktop recipes;
 - Krill installs a live system;
 - the GUI validates user choices, starts the selected tool and renders its
   progress and result.
-
-Note: Penguins Tailor is explicitly excluded from the GUI integration protocol.
-Tailor is designed to operate on naked (headless/CLI-only) systems to configure
-and install desktop environments before any GUI is available; hence, it remains
-exclusively a CLI/TUI tool.
 
 Each tool remains useful, installable and releasable without the GUI. The GUI
 must also remain usable when only some of the tools are installed.

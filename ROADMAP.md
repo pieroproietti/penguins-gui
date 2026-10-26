@@ -65,14 +65,6 @@ Goal: use Eggs data to present a trustworthy remaster workflow.
 **Complete when:** standard, clone and crypted modes use structured data on a
 supporting Eggs version and degrade clearly on older versions.
 
-## Note on Penguins Tailor
-
-Tailor integration is explicitly out of scope for `penguins-gui`. Tailor is
-designed to dress and configure naked systems from the console (CLI/TUI) before
-any display server or graphical interface is installed. A desktop GUI cannot run
-in that environment, and once a desktop is present, the tailoring step has
-already passed.
-
 ## M4 — Workflow composition and artifact management
 
 Goal: coordinate tools and artifacts without turning them into one coupled application.

@@ -1,4 +1,5 @@
-package main
+// Package ui implements the Fyne graphical user interface for Penguins GUI.
+package ui
 
 import (
 	"image/color"

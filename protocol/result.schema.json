@@ -14,7 +14,7 @@
     "run_id": {"type": "string", "minLength": 1},
     "sequence": {"type": "integer", "minimum": 0},
     "timestamp": {"type": "string", "format": "date-time"},
-    "tool": {"enum": ["eggs", "tailor", "krill"]},
+    "tool": {"enum": ["eggs", "chef", "krill"]},
     "tool_version": {"type": "string", "minLength": 1},
     "operation": {"type": "string", "minLength": 1},
     "state": {"const": "succeeded"},

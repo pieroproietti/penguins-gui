@@ -7,7 +7,7 @@
   "properties": {
     "protocol": {"const": "penguins/v1"},
     "request_id": {"type": "string", "minLength": 1},
-    "tool": {"enum": ["eggs", "tailor", "krill"]},
+    "tool": {"enum": ["eggs", "chef", "krill"]},
     "operation": {"type": "string", "minLength": 1},
     "options": {"type": "object"}
   },
@@ -24,20 +24,6 @@
       "then": {
         "properties": {
           "options": {"$ref": "#/$defs/eggsRemasterOptions"}
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "tool": {"const": "tailor"},
-          "operation": {"const": "wear"}
-        },
-        "required": ["tool", "operation"]
-      },
-      "then": {
-        "properties": {
-          "options": {"$ref": "#/$defs/tailorWearOptions"}
         }
       }
     }
@@ -60,26 +46,6 @@
         "working_directory": {"type": "string", "pattern": "^/"},
         "target_directory": {"type": "string", "pattern": "^/"},
         "compression": {"$ref": "#/$defs/compression"}
-      },
-      "additionalProperties": false
-    },
-    "tailorWearOptions": {
-      "type": "object",
-      "required": ["costume"],
-      "properties": {
-        "costume": {"type": "string", "minLength": 1},
-        "branch": {"type": "string", "minLength": 1},
-        "dry_run": {"type": "boolean"},
-        "add": {
-          "type": "array",
-          "items": {"type": "string", "minLength": 1},
-          "uniqueItems": true
-        },
-        "remove": {
-          "type": "array",
-          "items": {"type": "string", "minLength": 1},
-          "uniqueItems": true
-        }
       },
       "additionalProperties": false
     }

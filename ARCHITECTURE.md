@@ -9,20 +9,20 @@ not import their packages or reproduce their domain logic.
 The application must remain useful when only some tools are installed:
 
 - Eggs remasters the running system;
+- Chef applies system and desktop recipes;
+- Census manages community participation and statistics;
 - Krill installs a live system;
 - the GUI collects choices, requests authorization, starts operations and
   presents their progress and results.
 
-(Note: Penguins Tailor is explicitly excluded from the GUI because it is designed
-to run on naked systems before any graphical environment is installed.)
-
 The machine-readable contract is defined in [PROTOCOL.md](PROTOCOL.md). This
-document describes how the GUI should be organized around that contract.
+document describes how the GUI is organized around its packages.
 
-## Current prototype
+## Current structure
 
-The Fyne view remains in `main.go`, while `internal/tools/eggs.CLIAdapter`
-owns the existing textual CLI integration. The adapter currently:
+The Fyne presentation layer lives in `internal/ui`, while domain and CLI adapters
+live in `internal/eggs`, `internal/chef`, `internal/census`, and `internal/system`.
+`internal/eggs.CLIAdapter` currently:
 
 1. locates `eggs` in `PATH` and runs `eggs version`;
 2. maps the selected mode to the existing `eggs remaster` flags;
@@ -103,25 +103,20 @@ Each external program has one adapter responsible for:
 
 No tool-specific branching should escape into Fyne views.
 
-## Suggested package layout
-
-This is a direction for incremental refactoring, not a requirement to create
-every package immediately:
+## Package layout
 
 ```text
-cmd/penguins-gui/        application entry point
-internal/app/            workflows and application state
-internal/domain/         requests, events, plans, results
-internal/tools/          common process and protocol support
-internal/tools/eggs/     Eggs adapter and legacy fallback
-internal/tools/krill/    future Krill adapter
-internal/ui/             Fyne views and presentation models
+main.go                  application entry point
+cmd/package/             native package builder CLI
+cmd/appimage/            AppImage builder CLI
+internal/eggs/           Eggs CLI adapter, remaster modes, ISO discovery
+internal/chef/           Chef CLI adapter and recipe discovery
+internal/census/         Community profile validation, storage, UUID, and sync
+internal/system/         Host distro detection, repositories, GRUB, and installers
+internal/ui/             Fyne views, tabs, dialogs, log viewer, and theme scaling
 protocol/                JSON Schemas and examples
 pkg/builder/             native package builder
 ```
-
-Refactoring should follow actual needs. The first extraction can be only the
-Eggs adapter and remaster workflow.
 
 ## State model
 

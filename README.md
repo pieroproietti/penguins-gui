@@ -33,11 +33,6 @@ internals and does not modify Penguins' Eggs.
 Krill, AI assistance, configuration editing and artifact management are
 intentionally outside this first prototype.
 
-Integration with Penguins Tailor is explicitly excluded: Tailor operates on
-naked (headless/CLI) systems to prepare and customize them before a desktop
-environment exists, making a graphical interface both impossible and unnecessary
-for that stage.
-
 ## Requirements
 
 - Linux desktop
@@ -159,9 +154,7 @@ The builder detects the package family from `/etc/os-release` (`ID`, then
 On Debian, packaging requires Git, `dpkg-dev` (including `dpkg-shlibdeps`) and the Fyne
 build dependencies. `make package` rebuilds the GUI and writes a native `.deb`
 to `dist/`. Cross-compilation is not supported by this packaging workflow.
-The standalone Go builder uses only the standard library and has no dependency
-on Penguins Tailor. Its staging/metadata/archive design and Git version rules
-are adapted from Tailor's `pkg/builder`.
+The standalone Go builder (`pkg/builder`) uses only the standard library.
 
 The package installs `/usr/bin/penguins-gui`, its desktop launcher and a scalable
 SVG icon. Shared-library dependencies are calculated from the compiled binary
@@ -169,7 +162,7 @@ with `dpkg-shlibdeps`; `penguins-eggs`, `pkexec` and `xdg-utils` are also requir
 for the commands the GUI invokes. `sudo` is also a package dependency for clone
 authentication dialogs.
 
-Versioning follows Tailor: the nearest Git tag loses its leading `v`, and `-`
+For versioning, the nearest Git tag loses its leading `v`, and `-`
 and `_` become dots. The Debian revision is the number of commits reachable
 from HEAD but not from any tag, with zero replaced by one. Without tags, the
 base version is `0.1.0` and the revision is the total HEAD commit count (or one
@@ -186,7 +179,7 @@ pacman -Qlp dist/*.pkg.tar.zst
 
 Arch packaging uses a generated [PKGBUILD](https://man.archlinux.org/man/PKGBUILD.5.en)
 and `makepkg`, producing `dist/penguins-gui-VERSION-REVISION-ARCH.pkg.tar.zst`.
-As in Tailor, the recipe packages the staged native binary and desktop assets.
+The recipe packages the staged native binary and desktop assets.
 Runtime dependencies are recorded in the archive and checked by pacman at
 installation; they need not be installed on the build host.
 The shared staging step and separate distribution packagers allow additional
@@ -234,8 +227,8 @@ Tumbleweed and Slowroll. Eggs remains optional.
 For GUI tests, install `xorg-x11-server-Xvfb xauth xvfb-run`, then run
 `xvfb-run -a make test`.
 
-`./m` cleans, builds and installs the native package with `sudo pacman -U`
-`sudo dpkg -i`, `sudo dnf install` or `sudo zypper install`, following Tailor's convenience script.
+`./m` cleans, builds and installs the native package with `sudo pacman -U`,
+`sudo dpkg -i`, `sudo dnf install` or `sudo zypper install`.
 
 Inspect the Debian archive before installing it:
 
@@ -280,8 +273,7 @@ The AppImage does not install polkit rules or system packages on launch.
 
 ## Automated packages
 
-The [Hammers workflow](.github/workflows/hammers.yml), adapted from
-[Penguins Tailor](https://github.com/pieroproietti/penguins-tailor/blob/main/.github/workflows/hammers.yml),
+The [Hammers workflow](.github/workflows/hammers.yml)
 runs on pushes and pull requests to `main`, on version tags, and can also be started manually
 from GitHub Actions. It tests and builds a native amd64 `.deb` package in a Debian
 Bookworm container, compatible with Debian (Bookworm and Trixie), Devuan, and Ubuntu,

@@ -1,4 +1,4 @@
-package main
+package ui
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/pieroproietti/penguins-gui/internal/tools/chef"
+	"github.com/pieroproietti/penguins-gui/internal/chef"
 )
 
 // showCookDialog opens the interactive GUI recipe picker (apply.picker).
@@ -31,7 +31,7 @@ func showCookDialog(
 		return
 	}
 
-	// Filtriamo via le categorie di basso livello (base, dm, de, costumes) per la GUI
+	// Filter out low-level categories (base, dm, de, costumes) for the GUI
 	var recipes []chef.RecipeItem
 	for _, r := range rawRecipes {
 		cat := strings.ToLower(r.Category)

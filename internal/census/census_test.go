@@ -1,4 +1,4 @@
-package main
+package census
 
 import (
 	"encoding/json"
@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"fyne.io/fyne/v2/test"
 )
 
 func TestCleanSourceURLAndIsValidURL(t *testing.T) {
@@ -43,9 +41,7 @@ func TestCleanSourceURLAndIsValidURL(t *testing.T) {
 }
 
 func TestBioCharacterLimit(t *testing.T) {
-	// 200 runes should be valid
 	validBio := strings.Repeat("A", 200)
-	// 201 runes should fail
 	invalidBio := strings.Repeat("A", 201)
 
 	validData := CommunityData{
@@ -106,7 +102,6 @@ func TestCleanPlatformHandle(t *testing.T) {
 }
 
 func TestFormatContactAndAlphabeticalComputePrimaryContact(t *testing.T) {
-	// Must NEVER produce "github.com/https//github.com/..."
 	typoInput := "https//github.com/pieroproietti"
 	if got := FormatContact("github", typoInput); got != "https://github.com/pieroproietti" {
 		t.Errorf("expected 'https://github.com/pieroproietti', got %q", got)
@@ -134,7 +129,6 @@ func TestFormatContactAndAlphabeticalComputePrimaryContact(t *testing.T) {
 		t.Errorf("expected '@pierox', got %q", got)
 	}
 
-	// Alphabetical order: Facebook comes before GitHub and Telegram
 	socialsFB := CommunitySocials{
 		Facebook: "pierofb",
 		GitHub:   "pieroproietti",
@@ -145,7 +139,6 @@ func TestFormatContactAndAlphabeticalComputePrimaryContact(t *testing.T) {
 		t.Errorf("expected alphabetical first to be Facebook, got %q", primaryFB)
 	}
 
-	// Alphabetical order: Gitee comes before GitHub
 	socialsGitee := CommunitySocials{
 		Gitee:    "pierocn",
 		GitHub:   "pieroproietti",
@@ -156,7 +149,6 @@ func TestFormatContactAndAlphabeticalComputePrimaryContact(t *testing.T) {
 		t.Errorf("expected alphabetical first to be Gitee, got %q", primaryGitee)
 	}
 
-	// Alphabetical order: GitHub comes before Telegram
 	socialsGitHub := CommunitySocials{
 		GitHub:   "pieroproietti",
 		Telegram: "@ziopele",
@@ -167,7 +159,6 @@ func TestFormatContactAndAlphabeticalComputePrimaryContact(t *testing.T) {
 		t.Errorf("expected alphabetical first to be GitHub, got %q", primaryGitHub)
 	}
 
-	// Alphabetical order: Telegram comes before WeChat, WhatsApp, X
 	socialsTelegram := CommunitySocials{
 		Telegram: "@ziopele",
 		WeChat:   "wxid_test",
@@ -181,13 +172,11 @@ func TestFormatContactAndAlphabeticalComputePrimaryContact(t *testing.T) {
 }
 
 func TestValidateCommunityData(t *testing.T) {
-	// Disabled participation does not require email or source URL
 	disabled := CommunityData{Enabled: false}
 	if err := ValidateCommunityData(disabled); err != nil {
 		t.Errorf("expected disabled to be valid without email or source, got %v", err)
 	}
 
-	// Enabled with invalid SourceURL fails
 	enabledInvalidSource := CommunityData{
 		Enabled:   true,
 		SourceURL: "http//invalid-url",
@@ -196,7 +185,6 @@ func TestValidateCommunityData(t *testing.T) {
 		t.Errorf("expected error when source_url is invalid")
 	}
 
-	// Enabled with valid source URL succeeds without email
 	validData := CommunityData{
 		Enabled:   true,
 		Nickname:  "tux_artisan",
@@ -211,35 +199,30 @@ func TestValidateCommunityData(t *testing.T) {
 		t.Errorf("unexpected error on valid community data: %v", err)
 	}
 
-	// Email forbidden in source URL
 	emailInSource := validData
 	emailInSource.SourceURL = "mailto:admin@distro.org"
 	if err := ValidateCommunityData(emailInSource); err == nil {
 		t.Errorf("expected error when email is entered in source URL")
 	}
 
-	// Email forbidden in public social fields
 	emailInGitHub := validData
 	emailInGitHub.Socials.GitHub = "user@example.com"
 	if err := ValidateCommunityData(emailInGitHub); err == nil {
 		t.Errorf("expected error when email is entered in social field")
 	}
 
-	// Email forbidden in nickname
 	emailInNick := validData
 	emailInNick.Nickname = "user@example.com"
 	if err := ValidateCommunityData(emailInNick); err == nil {
 		t.Errorf("expected error when email is entered in nickname")
 	}
 
-	// Email forbidden in bio
 	emailInBio := validData
 	emailInBio.Bio = "Contact me at hello@domain.org"
 	if err := ValidateCommunityData(emailInBio); err == nil {
 		t.Errorf("expected error when email is entered in bio")
 	}
 
-	// Fediverse handle allowed
 	fediData := validData
 	fediData.Socials.X = "@artisan@fosstodon.org"
 	if err := ValidateCommunityData(fediData); err != nil {
@@ -260,11 +243,11 @@ func TestSaveAndLoadCommunityData(t *testing.T) {
 		Enabled:   true,
 		Nickname:  "tux_artisan",
 		Location:  "Rome, IT",
-		SourceURL: "https//github.com/pieroproietti/penguins-gui", // typo cleaned
+		SourceURL: "https//github.com/pieroproietti/penguins-gui",
 		Socials: CommunitySocials{
 			Facebook: "pierofb",
 			Gitee:    "pierocn",
-			GitHub:   "https//github.com/pieroproietti", // typo cleaned
+			GitHub:   "https//github.com/pieroproietti",
 			Telegram: "@ziopele",
 			WeChat:   "wx_artisan",
 			WhatsApp: "+39 333 1234567",
@@ -310,8 +293,6 @@ func TestSaveAndLoadCommunityData(t *testing.T) {
 	if loaded.Socials.WhatsApp != "+393331234567" {
 		t.Errorf("expected cleaned whatsapp '+393331234567', got %q", loaded.Socials.WhatsApp)
 	}
-
-	// Primary contact should be Facebook (alphabetically first)
 	if loaded.Contact != "https://facebook.com/pierofb" {
 		t.Errorf("expected primary contact 'https://facebook.com/pierofb', got %q", loaded.Contact)
 	}
@@ -326,7 +307,6 @@ func TestEmailNeverExposedInContact(t *testing.T) {
 		t.Errorf("contact looks like an exposed email: %s", contact)
 	}
 
-	// Even if someone only provided empty socials, contact must remain empty
 	socialsEmpty := CommunitySocials{}
 	emptyContact := ComputePrimaryContact(socialsEmpty)
 	if emptyContact != "" {
@@ -369,7 +349,6 @@ func TestBackwardCompatibilityWithMalformedCustomYaml(t *testing.T) {
 		t.Errorf("expected corrected contact 'https://github.com/pieroproietti', got %q", loaded.Contact)
 	}
 
-	// Resaving must produce clean JSON without email
 	if err := SaveCommunityData(loaded); err != nil {
 		t.Fatalf("SaveCommunityData failed: %v", err)
 	}
@@ -387,27 +366,6 @@ func TestBackwardCompatibilityWithMalformedCustomYaml(t *testing.T) {
 	}
 	if !strings.Contains(savedStr, `"source_url": "https://github.com/pieroproietti/penguins-eggs"`) {
 		t.Errorf("saved JSON missing source_url: %s", savedStr)
-	}
-}
-
-func TestBuildCommunityPanel(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
-
-	w := test.NewWindow(nil)
-	defer w.Close()
-
-	panel, getData := buildCommunityPanel(w, nil)
-	if panel == nil {
-		t.Fatalf("expected non-nil panel")
-	}
-	if getData == nil {
-		t.Fatalf("expected non-nil getData function")
-	}
-
-	data := getData()
-	if data.Enabled {
-		t.Errorf("expected initially disabled data")
 	}
 }
 
@@ -432,7 +390,6 @@ func TestSyncCommunityProfile(t *testing.T) {
 
 	t.Setenv("EGGS_COMMUNITY_ENDPOINT", srv.URL+"/api/community")
 
-	// 1. Sync enabled profile -> PUT /api/community/{uuid}
 	data := CommunityData{
 		Enabled:   true,
 		Nickname:  "artisan_sync",
@@ -464,7 +421,6 @@ func TestSyncCommunityProfile(t *testing.T) {
 		t.Errorf("sent payload must NEVER include email field")
 	}
 
-	// 2. Sync disabled profile -> DELETE /api/community/{uuid}
 	dataDisabled := CommunityData{
 		Enabled: false,
 	}
@@ -487,5 +443,128 @@ func TestGetMachineUUID(t *testing.T) {
 	}
 	if len(uuid) < 8 {
 		t.Errorf("GetMachineUUID returned unexpectedly short string: %s", uuid)
+	}
+}
+
+func TestTokenHeaderAndAutoCapture(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	var lastHeaders http.Header
+	var responseJSON string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lastHeaders = r.Header.Clone()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(responseJSON))
+	}))
+	defer srv.Close()
+
+	t.Setenv("EGGS_COMMUNITY_ENDPOINT", srv.URL+"/api/community")
+
+	responseJSON = `{"status":"ok","id":"distro-artist","artisan_token":"egg_pat_generated987"}`
+	initialData := CommunityData{
+		Enabled:  true,
+		Nickname: "distro-artist",
+		Location: "Milan, IT",
+	}
+
+	if err := SyncCommunityProfile(initialData); err != nil {
+		t.Fatalf("SyncCommunityProfile creation failed: %v", err)
+	}
+
+	saved := LoadCommunityData()
+	if saved.ArtisanToken != "egg_pat_generated987" {
+		t.Errorf("expected auto-captured token 'egg_pat_generated987', got %q", saved.ArtisanToken)
+	}
+	if saved.ID != "distro-artist" {
+		t.Errorf("expected auto-captured ID 'distro-artist', got %q", saved.ID)
+	}
+
+	responseJSON = `{"status":"ok","id":"distro-artist"}`
+	saved.Location = "Turin, IT"
+	if err := SyncCommunityProfile(saved); err != nil {
+		t.Fatalf("SyncCommunityProfile update failed: %v", err)
+	}
+
+	if sentTok := lastHeaders.Get("X-Eggs-Artisan-Token"); sentTok != "egg_pat_generated987" {
+		t.Errorf("expected X-Eggs-Artisan-Token header 'egg_pat_generated987', got %q", sentTok)
+	}
+	if authHdr := lastHeaders.Get("Authorization"); authHdr != "Bearer egg_pat_generated987" {
+		t.Errorf("expected Bearer Authorization header, got %q", authHdr)
+	}
+
+	saved.Enabled = false
+	if err := SyncCommunityProfile(saved); err != nil {
+		t.Fatalf("SyncCommunityProfile delete failed: %v", err)
+	}
+	if sentTok := lastHeaders.Get("X-Eggs-Artisan-Token"); sentTok != "egg_pat_generated987" {
+		t.Errorf("expected X-Eggs-Artisan-Token header on DELETE, got %q", sentTok)
+	}
+}
+
+func TestFetchProfileWithToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	var lastToken string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lastToken = r.Header.Get("X-Eggs-Artisan-Token")
+		if lastToken != "egg_pat_valid_token_123" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"id": "linux-artisan",
+			"uuid": "linux-artisan",
+			"nickname": "LinuxArtisan",
+			"location": "Bologna, IT",
+			"source_url": "https://github.com/artisan/distro",
+			"bio": "Crafting Linux distros with Eggs",
+			"socials": {
+				"github": "artisan",
+				"telegram": "@artisan"
+			},
+			"enabled": true
+		}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("EGGS_COMMUNITY_ENDPOINT", srv.URL+"/api/community")
+
+	errBad := FetchProfileWithToken("egg_pat_bad_token")
+	if errBad == nil {
+		t.Fatalf("expected error with bad token, got nil")
+	}
+
+	errValid := FetchProfileWithToken("egg_pat_valid_token_123")
+	if errValid != nil {
+		t.Fatalf("FetchProfileWithToken failed: %v", errValid)
+	}
+
+	loaded := LoadCommunityData()
+	if !loaded.Enabled {
+		t.Errorf("expected loaded.Enabled == true")
+	}
+	if loaded.ArtisanToken != "egg_pat_valid_token_123" {
+		t.Errorf("expected ArtisanToken 'egg_pat_valid_token_123', got %q", loaded.ArtisanToken)
+	}
+	if loaded.ID != "linux-artisan" {
+		t.Errorf("expected ID 'linux-artisan', got %q", loaded.ID)
+	}
+	if loaded.Nickname != "LinuxArtisan" {
+		t.Errorf("expected Nickname 'LinuxArtisan', got %q", loaded.Nickname)
+	}
+	if loaded.Location != "Bologna, IT" {
+		t.Errorf("expected Location 'Bologna, IT', got %q", loaded.Location)
+	}
+	if loaded.Socials.GitHub != "artisan" {
+		t.Errorf("expected GitHub 'artisan', got %q", loaded.Socials.GitHub)
 	}
 }
