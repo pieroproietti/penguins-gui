@@ -16,9 +16,11 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
 
 	"github.com/pieroproietti/penguins-gui/internal/chef"
 )
@@ -247,4 +249,47 @@ profiles:
 	}
 	_ = executedArgs
 	_ = logged
+}
+
+func TestToolbarAndTopBarPlacement(t *testing.T) {
+	a := test.NewApp()
+	ui := &App{
+		fyneApp:          a,
+		explanationLabel: widget.NewLabel(defaultExplanation),
+	}
+
+	toolbarRow := ui.buildToolbarRow()
+	if toolbarRow == nil {
+		t.Fatalf("expected non-nil toolbarRow")
+	}
+	if ui.tbCreateISO == nil || ui.tbKill == nil || ui.tbClean == nil || ui.tbCook == nil || ui.tbGrub == nil {
+		t.Fatalf("expected second toolbar action buttons to be initialized")
+	}
+	if ui.tbDocs != nil || ui.tbStats != nil || ui.tbQuit != nil {
+		t.Fatalf("expected Docs, Stats, Exit not to be initialized by buildToolbarRow")
+	}
+
+	tabs := container.NewAppTabs(
+		container.NewTabItemWithIcon("Remaster", theme.DocumentCreateIcon(), widget.NewLabel("Remaster")),
+		container.NewTabItemWithIcon("Community", theme.AccountIcon(), widget.NewLabel("Community")),
+	)
+	mainContent := ui.buildMainContent(tabs)
+	if mainContent == nil {
+		t.Fatalf("expected non-nil mainContent")
+	}
+	if ui.tbDocs == nil || ui.tbStats == nil || ui.tbQuit == nil {
+		t.Fatalf("expected Docs, Stats, Exit to be initialized by buildMainContent")
+	}
+
+	mainContent.Resize(fyne.NewSize(900, 700))
+	if len(mainContent.Objects) != 2 {
+		t.Fatalf("expected 2 objects in mainContent, got %d", len(mainContent.Objects))
+	}
+	rightBox := mainContent.Objects[1]
+	if rightBox.Position().X <= 0 {
+		t.Errorf("expected right-aligned top bar actions to have positive X position, got %v", rightBox.Position().X)
+	}
+	if rightBox.Position().Y != 0 {
+		t.Errorf("expected top bar actions to be aligned at Y=0, got %v", rightBox.Position().Y)
+	}
 }

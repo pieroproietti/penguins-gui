@@ -1,48 +1,48 @@
-# Penguins GUI v26.10.26
+# Penguins GUI v26.10.28
 
 A modern desktop interface for creating Penguins' Eggs live images and clones,
 cooking system recipes with Penguins Chef, participating in the Penguins Eggs Community,
 managing system installers and setup tools, and booting live ISOs directly from disk without a USB drive.
 
-## What's New in v26.10.26
+## What's New in v26.10.28
 
-### 🌍 Penguins Eggs Community Integration
-* **Dedicated Community Tab**: Join the global Penguins Eggs Community directly from the GUI to share your public artisan profile (Nickname, Location, Repository/Website URL, Bio up to 200 characters, and optional Social / Fediverse handles).
-* **Single-Checkbox Workflow**:
-  * **Check `Join the Penguins Eggs Community`** to validate, save (`community.json` & `community.yaml`), and publish your profile to the Community server (or automatically import your existing profile if only the Community Token field is filled).
-  * **Uncheck `Join the Penguins Eggs Community`** to remove your public data from the Community server while keeping all your local fields preserved and editable on your machine.
-* **Secure Private Token Storage**: Stores your private Community Token (`egg_pat_...`) exclusively in `~/.ssh/penguins-community.secret` (`0600` permissions), never inside `community.json` or `community.yaml`.
-* **Privacy & Anti-Spam Protection**: Email addresses are strictly forbidden across all public fields, while Fediverse handles (`@user@instance.social`) are fully supported.
+### 🖥️ Toolbar & Top Bar Layout
+* **Right-Aligned Top Bar Actions**: Moved `Docs`, `Stats`, and `Exit` to the right side of the primary top bar alongside the `Remaster` and `Community` tabs.
+* **Streamlined Action Toolbar**: Removed the duplicate `Community` button from the secondary toolbar, keeping it focused on `Create ISO`, `Kill`, `Clean`, `Cook`, and `Boot ISO`.
 
-### 🏗️ Modular Architecture Refactoring
-* **Clean Package Structure**: Reorganized the codebase into focused internal packages (`internal/ui`, `internal/community`, `internal/eggs`, `internal/chef`, `internal/system`, and `internal/builder`) with comprehensive unit test coverage.
+### 🌍 Penguins Eggs Community Refinements
+* **ON / OFF Toggle Button**: Replaced the community checkbox and status text with a clean `Join the Penguins Eggs Community: ON / OFF` toggle button.
+* **Visible Read-Only State when OFF**: When `OFF`, saved profile fields remain visible but disabled while public data is removed from the Community server. When `ON`, fields are enabled with automatic local saving and server synchronization.
+
+### 🍳 Penguins Chef CLI Update
+* **Updated Chef Commands**: Replaced `chef get` and `chef apply` with `chef cook --pull` and `chef cook`.
 
 ## Installation
 
 ### AppImage
 ```sh
-chmod +x penguins-gui-26.10.26-1-x86_64.AppImage
-./penguins-gui-26.10.26-1-x86_64.AppImage
+chmod +x penguins-gui-26.10.28-1-x86_64.AppImage
+./penguins-gui-26.10.28-1-x86_64.AppImage
 ```
 
 ### Debian / Ubuntu / Devuan (.deb)
 ```sh
-sudo apt install ./penguins-gui_26.10.26-1_amd64.deb
+sudo apt install ./penguins-gui_26.10.28-1_amd64.deb
 ```
 
 ### Fedora (.rpm)
 ```sh
-sudo dnf install ./penguins-gui-26.10.26-1.fc44.x86_64.rpm
+sudo dnf install ./penguins-gui-26.10.28-1.fc44.x86_64.rpm
 ```
 
 ### openSUSE (.rpm)
 ```sh
-sudo zypper install ./penguins-gui-26.10.26-1.opensuse.x86_64.rpm
+sudo zypper install ./penguins-gui-26.10.28-1.opensuse.x86_64.rpm
 ```
 
 ### Arch Linux / Manjaro (.pkg.tar.zst)
 ```sh
-sudo pacman -U ./penguins-gui-26.10.26-1-x86_64.pkg.tar.zst
+sudo pacman -U ./penguins-gui-26.10.28-1-x86_64.pkg.tar.zst
 ```
 
 Run Penguins GUI as a normal desktop user. SHA256SUMS is provided alongside the

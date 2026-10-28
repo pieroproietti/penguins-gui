@@ -1,5 +1,22 @@
 # Changelog
 
+## Release Notes: penguins-gui v26.10.28 - 2026-10-28
+
+### 🖥️ Toolbar & Top Bar Layout
+
+* **Right-Aligned Top Bar Actions**: Moved `Docs`, `Stats`, and `Exit` to the right side of the primary top bar alongside the `Remaster` and `Community` tabs, making them accessible across the entire application.
+* **Streamlined Action Toolbar**: Removed the duplicate `Community` button and relocated global links from the secondary action toolbar, keeping it focused on core operations (`Create ISO`, `Kill`, `Clean`, `Cook`, and `Boot ISO`).
+
+### 🌍 Penguins Eggs Community Refinements
+
+* **ON / OFF Toggle Button**: Replaced the community checkbox and status line with a clean `Join the Penguins Eggs Community: ON / OFF` toggle button.
+* **Visible Read-Only State when OFF**: When set to `OFF`, saved profile fields remain populated and visible but disabled, while public data is removed from the Community server. When switched to `ON`, fields are unlocked for editing with automatic local persistence and server synchronization.
+* **Table-Driven Socials & Unified HTTP Client**: Refactored social channel management and unified HTTP request/fallback handling in `internal/community`.
+
+### 🍳 Penguins Chef CLI Update
+
+* **Updated Chef Commands**: Replaced `chef get` and `chef apply` with `chef cook --pull` and `chef cook` to match the latest `penguins-chef` CLI.
+
 ## Release Notes: penguins-gui v26.10.26 - 2026-10-26
 
 ### 🌍 Penguins Eggs Community Integration

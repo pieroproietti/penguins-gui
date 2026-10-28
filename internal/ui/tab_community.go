@@ -10,9 +10,9 @@
 package ui
 
 import (
-	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -24,27 +24,32 @@ import (
 	"github.com/pieroproietti/penguins-gui/internal/community"
 )
 
+type socialField struct {
+	key         string
+	label       string
+	placeholder string
+	field       func(*community.CommunitySocials) *string
+	check       *widget.Check
+	entry       *widget.Entry
+}
+
 // buildCommunityPanel creates the UI container for the Community configuration panel.
 func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) (fyne.CanvasObject, func() community.CommunityData) {
-	checkEnabled := widget.NewCheck("Join the Penguins Eggs Community", nil)
+	var isEnabled bool
+	var toggleBtn *widget.Button
 
-	// Community Token (stored in ~/.ssh/penguins-community.secret for multi-machine synchronization)
 	tokenEntry := widget.NewPasswordEntry()
 	tokenEntry.SetPlaceHolder("Community Token (egg_pat_...) — saved in ~/.ssh/penguins-community.secret")
 
-	// 2. Nickname / Public handle
 	nicknameEntry := widget.NewEntry()
 	nicknameEntry.SetPlaceHolder("e.g. tux_artisan or @nickname")
 
-	// 3. Location / City
 	locationEntry := widget.NewEntry()
 	locationEntry.SetPlaceHolder("e.g. Rome, IT")
 
-	// 4. Repository / Website URL (source_url)
 	sourceURLEntry := widget.NewEntry()
 	sourceURLEntry.SetPlaceHolder("e.g. https://github.com/user/distro or https://mydistro.org")
 
-	// 5. Bio / Description (before socials, max 200 characters)
 	bioEntry := widget.NewMultiLineEntry()
 	bioEntry.SetPlaceHolder("Short description of your project, distro, or interests (max 200 characters)...")
 	bioEntry.Wrapping = fyne.TextWrapWord
@@ -53,34 +58,58 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 	bioCounterLabel := widget.NewLabel(fmt.Sprintf("0/%d characters", community.MaxBioLength))
 	bioCounterLabel.TextStyle = fyne.TextStyle{Italic: true}
 
-	// 6. Social Networks / Contact (alphabetical order)
-	checkFacebook := widget.NewCheck("Facebook", nil)
-	entryFacebook := widget.NewEntry()
-	entryFacebook.SetPlaceHolder("e.g. username or facebook.com/username")
+	socials := []*socialField{
+		{
+			key:         "facebook",
+			label:       "Facebook",
+			placeholder: "e.g. username or facebook.com/username",
+			field:       func(s *community.CommunitySocials) *string { return &s.Facebook },
+		},
+		{
+			key:         "gitee",
+			label:       "Gitee",
+			placeholder: "e.g. username or gitee.com/username",
+			field:       func(s *community.CommunitySocials) *string { return &s.Gitee },
+		},
+		{
+			key:         "github",
+			label:       "GitHub",
+			placeholder: "e.g. username or github.com/username",
+			field:       func(s *community.CommunitySocials) *string { return &s.GitHub },
+		},
+		{
+			key:         "telegram",
+			label:       "Telegram",
+			placeholder: "e.g. @username or t.me/username",
+			field:       func(s *community.CommunitySocials) *string { return &s.Telegram },
+		},
+		{
+			key:         "wechat",
+			label:       "WeChat",
+			placeholder: "e.g. WeChat ID",
+			field:       func(s *community.CommunitySocials) *string { return &s.WeChat },
+		},
+		{
+			key:         "whatsapp",
+			label:       "WhatsApp",
+			placeholder: "e.g. +39 333 1234567 or wa.me/number",
+			field:       func(s *community.CommunitySocials) *string { return &s.WhatsApp },
+		},
+		{
+			key:         "x",
+			label:       "X (Twitter)",
+			placeholder: "e.g. @username or x.com/username",
+			field:       func(s *community.CommunitySocials) *string { return &s.X },
+		},
+	}
 
-	checkGitee := widget.NewCheck("Gitee", nil)
-	entryGitee := widget.NewEntry()
-	entryGitee.SetPlaceHolder("e.g. username or gitee.com/username")
-
-	checkGitHub := widget.NewCheck("GitHub", nil)
-	entryGitHub := widget.NewEntry()
-	entryGitHub.SetPlaceHolder("e.g. username or github.com/username")
-
-	checkTelegram := widget.NewCheck("Telegram", nil)
-	entryTelegram := widget.NewEntry()
-	entryTelegram.SetPlaceHolder("e.g. @username or t.me/username")
-
-	checkWeChat := widget.NewCheck("WeChat", nil)
-	entryWeChat := widget.NewEntry()
-	entryWeChat.SetPlaceHolder("e.g. WeChat ID")
-
-	checkWhatsApp := widget.NewCheck("WhatsApp", nil)
-	entryWhatsApp := widget.NewEntry()
-	entryWhatsApp.SetPlaceHolder("e.g. +39 333 1234567 or wa.me/number")
-
-	checkX := widget.NewCheck("X (Twitter)", nil)
-	entryX := widget.NewEntry()
-	entryX.SetPlaceHolder("e.g. @username or x.com/username")
+	socialFormObjects := make([]fyne.CanvasObject, 0, len(socials)*2)
+	for _, sf := range socials {
+		sf.check = widget.NewCheck(sf.label, nil)
+		sf.entry = widget.NewEntry()
+		sf.entry.SetPlaceHolder(sf.placeholder)
+		socialFormObjects = append(socialFormObjects, sf.check, sf.entry)
+	}
 
 	socialHelp := widget.NewLabel("ℹ️ Optional: enter your public social channels. Email addresses are strictly forbidden; Fediverse handles (@user@instance.social) are allowed.")
 	socialHelp.TextStyle = fyne.TextStyle{Italic: true}
@@ -89,72 +118,64 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 	validationError := widget.NewLabel("")
 	validationError.Wrapping = fyne.TextWrapWord
 	validationError.TextStyle = fyne.TextStyle{Bold: true}
-
-	statusLabel := widget.NewLabel("")
-	statusLabel.Wrapping = fyne.TextWrapWord
+	validationError.Hide()
 
 	var currentID string
 	var suppressEvents bool
+	var syncTimer *time.Timer
+	var syncSeq uint64
 	var updateFieldStates func()
 
-	setCheckedSilent := func(checked bool) {
-		prev := suppressEvents
-		suppressEvents = true
-		checkEnabled.SetChecked(checked)
-		suppressEvents = prev
+	setEnabledSilent := func(enabled bool) {
+		isEnabled = enabled
+		if toggleBtn != nil {
+			if enabled {
+				toggleBtn.SetText("Join the Penguins Eggs Community: ON")
+				toggleBtn.SetIcon(theme.ConfirmIcon())
+				toggleBtn.Importance = widget.HighImportance
+			} else {
+				toggleBtn.SetText("Join the Penguins Eggs Community: OFF")
+				toggleBtn.SetIcon(theme.AccountIcon())
+				toggleBtn.Importance = widget.MediumImportance
+			}
+			toggleBtn.Refresh()
+		}
 	}
 
 	currentData := func() community.CommunityData {
-		socials := community.CommunitySocials{}
-		if checkFacebook.Checked {
-			socials.Facebook = community.CleanPlatformHandle("facebook", entryFacebook.Text)
+		var soc community.CommunitySocials
+		for _, sf := range socials {
+			if sf.check.Checked {
+				*sf.field(&soc) = community.CleanPlatformHandle(sf.key, sf.entry.Text)
+			}
 		}
-		if checkGitee.Checked {
-			socials.Gitee = community.CleanPlatformHandle("gitee", entryGitee.Text)
-		}
-		if checkGitHub.Checked {
-			socials.GitHub = community.CleanPlatformHandle("github", entryGitHub.Text)
-		}
-		if checkTelegram.Checked {
-			socials.Telegram = community.CleanPlatformHandle("telegram", entryTelegram.Text)
-		}
-		if checkWeChat.Checked {
-			socials.WeChat = community.CleanPlatformHandle("wechat", entryWeChat.Text)
-		}
-		if checkWhatsApp.Checked {
-			socials.WhatsApp = community.CleanPlatformHandle("whatsapp", entryWhatsApp.Text)
-		}
-		if checkX.Checked {
-			socials.X = community.CleanPlatformHandle("x", entryX.Text)
-		}
-
-		primary := community.ComputePrimaryContact(socials)
 
 		return community.CommunityData{
 			ID:           currentID,
 			ArtisanToken: strings.TrimSpace(tokenEntry.Text),
-			Enabled:      checkEnabled.Checked,
+			Enabled:      isEnabled,
 			Nickname:     strings.TrimSpace(nicknameEntry.Text),
 			Location:     strings.TrimSpace(locationEntry.Text),
 			SourceURL:    community.CleanSourceURL(sourceURLEntry.Text),
 			Bio:          strings.TrimSpace(bioEntry.Text),
-			Contact:      primary,
-			Socials:      socials,
+			Contact:      community.ComputePrimaryContact(soc),
+			Socials:      soc,
 		}
 	}
 
 	hasAnyProfileField := func() bool {
-		return strings.TrimSpace(nicknameEntry.Text) != "" ||
+		if strings.TrimSpace(nicknameEntry.Text) != "" ||
 			strings.TrimSpace(locationEntry.Text) != "" ||
 			strings.TrimSpace(sourceURLEntry.Text) != "" ||
-			strings.TrimSpace(bioEntry.Text) != "" ||
-			(checkFacebook.Checked && strings.TrimSpace(entryFacebook.Text) != "") ||
-			(checkGitee.Checked && strings.TrimSpace(entryGitee.Text) != "") ||
-			(checkGitHub.Checked && strings.TrimSpace(entryGitHub.Text) != "") ||
-			(checkTelegram.Checked && strings.TrimSpace(entryTelegram.Text) != "") ||
-			(checkWeChat.Checked && strings.TrimSpace(entryWeChat.Text) != "") ||
-			(checkWhatsApp.Checked && strings.TrimSpace(entryWhatsApp.Text) != "") ||
-			(checkX.Checked && strings.TrimSpace(entryX.Text) != "")
+			strings.TrimSpace(bioEntry.Text) != "" {
+			return true
+		}
+		for _, sf := range socials {
+			if sf.check.Checked && strings.TrimSpace(sf.entry.Text) != "" {
+				return true
+			}
+		}
+		return false
 	}
 
 	validateInputs := func() bool {
@@ -162,9 +183,11 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 		data.Enabled = true
 		if err := community.ValidateCommunityData(data); err != nil {
 			validationError.SetText("⚠️ " + err.Error())
+			validationError.Show()
 			return false
 		}
 		validationError.SetText("")
+		validationError.Hide()
 		return true
 	}
 
@@ -183,173 +206,149 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 		bioEntry.SetText(d.Bio)
 		bioCounterLabel.SetText(fmt.Sprintf("%d/%d characters", len([]rune(d.Bio)), community.MaxBioLength))
 
-		checkFacebook.SetChecked(d.Socials.Facebook != "")
-		entryFacebook.SetText(d.Socials.Facebook)
-		checkGitee.SetChecked(d.Socials.Gitee != "")
-		entryGitee.SetText(d.Socials.Gitee)
-		checkGitHub.SetChecked(d.Socials.GitHub != "")
-		entryGitHub.SetText(d.Socials.GitHub)
-		checkTelegram.SetChecked(d.Socials.Telegram != "")
-		entryTelegram.SetText(d.Socials.Telegram)
-		checkWeChat.SetChecked(d.Socials.WeChat != "")
-		entryWeChat.SetText(d.Socials.WeChat)
-		checkWhatsApp.SetChecked(d.Socials.WhatsApp != "")
-		entryWhatsApp.SetText(d.Socials.WhatsApp)
-		checkX.SetChecked(d.Socials.X != "")
-		entryX.SetText(d.Socials.X)
-	}
-
-	// When checked (published to Community): fields are locked (read-only).
-	// When unchecked (removed from server / local mode): fields are editable.
-	updateFieldStates = func() {
-		published := checkEnabled.Checked
-		if published {
-			tokenEntry.Disable()
-			nicknameEntry.Disable()
-			locationEntry.Disable()
-			sourceURLEntry.Disable()
-			bioEntry.Disable()
-			checkFacebook.Disable()
-			checkGitee.Disable()
-			checkGitHub.Disable()
-			checkTelegram.Disable()
-			checkWeChat.Disable()
-			checkWhatsApp.Disable()
-			checkX.Disable()
-			entryFacebook.Disable()
-			entryGitee.Disable()
-			entryGitHub.Disable()
-			entryTelegram.Disable()
-			entryWeChat.Disable()
-			entryWhatsApp.Disable()
-			entryX.Disable()
-			validationError.SetText("")
-		} else {
-			tokenEntry.Enable()
-			nicknameEntry.Enable()
-			locationEntry.Enable()
-			sourceURLEntry.Enable()
-			bioEntry.Enable()
-			checkFacebook.Enable()
-			checkGitee.Enable()
-			checkGitHub.Enable()
-			checkTelegram.Enable()
-			checkWeChat.Enable()
-			checkWhatsApp.Enable()
-			checkX.Enable()
-
-			if checkFacebook.Checked {
-				entryFacebook.Enable()
-			} else {
-				entryFacebook.Disable()
-			}
-			if checkGitee.Checked {
-				entryGitee.Enable()
-			} else {
-				entryGitee.Disable()
-			}
-			if checkGitHub.Checked {
-				entryGitHub.Enable()
-			} else {
-				entryGitHub.Disable()
-			}
-			if checkTelegram.Checked {
-				entryTelegram.Enable()
-			} else {
-				entryTelegram.Disable()
-			}
-			if checkWeChat.Checked {
-				entryWeChat.Enable()
-			} else {
-				entryWeChat.Disable()
-			}
-			if checkWhatsApp.Checked {
-				entryWhatsApp.Enable()
-			} else {
-				entryWhatsApp.Disable()
-			}
-			if checkX.Checked {
-				entryX.Enable()
-			} else {
-				entryX.Disable()
-			}
-
-			validateInputs()
+		for _, sf := range socials {
+			val := *sf.field(&d.Socials)
+			sf.check.SetChecked(val != "")
+			sf.entry.SetText(val)
 		}
 	}
 
-	saveLocalDraftQuietly := func() {
-		if suppressEvents || checkEnabled.Checked {
+	// When OFF: fields remain populated (visible) but disabled.
+	// When ON: fields are enabled and editable.
+	updateFieldStates = func() {
+		textEntries := []*widget.Entry{nicknameEntry, locationEntry, sourceURLEntry, bioEntry}
+		if !isEnabled {
+			tokenEntry.Disable()
+			for _, e := range textEntries {
+				e.Disable()
+			}
+			for _, sf := range socials {
+				sf.check.Disable()
+				sf.entry.Disable()
+			}
+			validationError.SetText("")
+			validationError.Hide()
 			return
 		}
-		if validateInputs() {
-			draft := currentData()
-			draft.Enabled = false
-			_ = community.SaveCommunityData(draft)
+
+		tokenEntry.Enable()
+		for _, e := range textEntries {
+			e.Enable()
+		}
+		for _, sf := range socials {
+			sf.check.Enable()
+			if sf.check.Checked {
+				sf.entry.Enable()
+			} else {
+				sf.entry.Disable()
+			}
+		}
+
+		if hasAnyProfileField() {
+			validateInputs()
+		} else {
+			validationError.SetText("")
+			validationError.Hide()
 		}
 	}
 
-	// Wire social checkbox toggles
-	checkFacebook.OnChanged = func(checked bool) {
-		if checked && !checkEnabled.Checked {
-			entryFacebook.Enable()
-		} else {
-			entryFacebook.Disable()
+	saveAndSyncOnEdit := func() {
+		if suppressEvents || !isEnabled {
+			return
 		}
-		saveLocalDraftQuietly()
-	}
-	checkGitee.OnChanged = func(checked bool) {
-		if checked && !checkEnabled.Checked {
-			entryGitee.Enable()
+
+		valid := true
+		if hasAnyProfileField() {
+			valid = validateInputs()
 		} else {
-			entryGitee.Disable()
+			validationError.SetText("")
+			validationError.Hide()
 		}
-		saveLocalDraftQuietly()
-	}
-	checkGitHub.OnChanged = func(checked bool) {
-		if checked && !checkEnabled.Checked {
-			entryGitHub.Enable()
-		} else {
-			entryGitHub.Disable()
+
+		data := currentData()
+		_ = community.SaveCommunityData(data)
+		if onUpdate != nil {
+			onUpdate(data)
 		}
-		saveLocalDraftQuietly()
-	}
-	checkTelegram.OnChanged = func(checked bool) {
-		if checked && !checkEnabled.Checked {
-			entryTelegram.Enable()
-		} else {
-			entryTelegram.Disable()
+
+		if !valid {
+			if syncTimer != nil {
+				syncTimer.Stop()
+			}
+			return
 		}
-		saveLocalDraftQuietly()
-	}
-	checkWeChat.OnChanged = func(checked bool) {
-		if checked && !checkEnabled.Checked {
-			entryWeChat.Enable()
-		} else {
-			entryWeChat.Disable()
+
+		tok := strings.TrimSpace(tokenEntry.Text)
+		onlyToken := !hasAnyProfileField() && tok != ""
+		if !onlyToken && !hasAnyProfileField() {
+			if syncTimer != nil {
+				syncTimer.Stop()
+			}
+			return
 		}
-		saveLocalDraftQuietly()
-	}
-	checkWhatsApp.OnChanged = func(checked bool) {
-		if checked && !checkEnabled.Checked {
-			entryWhatsApp.Enable()
-		} else {
-			entryWhatsApp.Disable()
+
+		syncSeq++
+		seq := syncSeq
+		if syncTimer != nil {
+			syncTimer.Stop()
 		}
-		saveLocalDraftQuietly()
-	}
-	checkX.OnChanged = func(checked bool) {
-		if checked && !checkEnabled.Checked {
-			entryX.Enable()
-		} else {
-			entryX.Disable()
-		}
-		saveLocalDraftQuietly()
+		syncTimer = time.AfterFunc(800*time.Millisecond, func() {
+			if onlyToken {
+				imported, err := community.FetchProfileWithTokenData(tok)
+				fyne.Do(func() {
+					if seq != syncSeq || !isEnabled || err != nil {
+						return
+					}
+					imported.Enabled = true
+					_ = community.SaveCommunityData(*imported)
+					populateFields(*imported)
+					updateFieldStates()
+					if onUpdate != nil {
+						onUpdate(*imported)
+					}
+				})
+				return
+			}
+
+			err := community.SyncCommunityProfile(data)
+			fyne.Do(func() {
+				if seq != syncSeq || !isEnabled || err != nil {
+					return
+				}
+				saved := community.LoadCommunityData()
+				if saved.ArtisanToken != "" && saved.ArtisanToken != strings.TrimSpace(tokenEntry.Text) {
+					prev := suppressEvents
+					suppressEvents = true
+					tokenEntry.SetText(saved.ArtisanToken)
+					suppressEvents = prev
+				}
+				if saved.ID != "" {
+					currentID = saved.ID
+				}
+				if onUpdate != nil {
+					onUpdate(saved)
+				}
+			})
+		})
 	}
 
 	onTextChange := func(string) {
-		saveLocalDraftQuietly()
+		saveAndSyncOnEdit()
 	}
+
+	for _, sf := range socials {
+		s := sf
+		s.check.OnChanged = func(checked bool) {
+			if checked && isEnabled {
+				s.entry.Enable()
+			} else {
+				s.entry.Disable()
+			}
+			saveAndSyncOnEdit()
+		}
+		s.entry.OnChanged = onTextChange
+	}
+
 	tokenEntry.OnChanged = onTextChange
 	nicknameEntry.OnChanged = onTextChange
 	locationEntry.OnChanged = onTextChange
@@ -362,97 +361,87 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 			runes = []rune(bioEntry.Text)
 		}
 		bioCounterLabel.SetText(fmt.Sprintf("%d/%d characters", len(runes), community.MaxBioLength))
-		saveLocalDraftQuietly()
+		saveAndSyncOnEdit()
 	}
 
-	entryFacebook.OnChanged = onTextChange
-	entryGitee.OnChanged = onTextChange
-	entryGitHub.OnChanged = onTextChange
-	entryTelegram.OnChanged = onTextChange
-	entryWeChat.OnChanged = onTextChange
-	entryWhatsApp.OnChanged = onTextChange
-	entryX.OnChanged = onTextChange
-
-	// Single checkbox drives everything:
-	// - Checked (true):
-	//   * If only Token is present (profile fields empty): imports profile from server via token, populates & enables.
-	//   * Otherwise: validates fields, saves locally, and publishes (PUT) profile to Community server.
-	// - Unchecked (false):
-	//   * Removes profile data from Community server (DELETE) while keeping all local fields & token editable.
-	checkEnabled.OnChanged = func(checked bool) {
+	// Single ON/OFF button drives community participation:
+	// - ON (true):
+	//   * Enables fields for editing.
+	//   * If only Token is present (profile fields empty): imports profile from server via token and populates fields.
+	//   * If profile fields are present: validates, saves locally, and publishes (PUT) profile to Community server.
+	// - OFF (false):
+	//   * Disables fields (keeping their values visible and saved locally) and removes public profile from Community server (DELETE).
+	toggleBtn = widget.NewButtonWithIcon("Join the Penguins Eggs Community: OFF", theme.AccountIcon(), func() {
 		if suppressEvents {
 			return
 		}
 
+		targetState := !isEnabled
 		tok := strings.TrimSpace(tokenEntry.Text)
 
-		if checked {
+		if targetState {
 			// Case 1: Only token is filled and profile fields are empty -> Import from server
 			if !hasAnyProfileField() && tok != "" {
+				setEnabledSilent(true)
 				updateFieldStates()
-				statusLabel.SetText("Importing profile from community server with token...")
+				toggleBtn.Disable()
 				go func() {
 					imported, err := community.FetchProfileWithTokenData(tok)
 					fyne.Do(func() {
+						toggleBtn.Enable()
 						if err != nil {
-							setCheckedSilent(false)
-							updateFieldStates()
-							statusLabel.SetText("⚠️ Token import failed: " + err.Error())
 							dialog.ShowError(err, w)
 							return
 						}
 						imported.Enabled = true
 						_ = community.SaveCommunityData(*imported)
 						populateFields(*imported)
-						setCheckedSilent(true)
+						setEnabledSilent(true)
 						updateFieldStates()
 						if onUpdate != nil {
 							onUpdate(*imported)
 						}
-						statusLabel.SetText(fmt.Sprintf("✅ Profile @%s imported and active in the Community!", imported.Nickname))
 					})
 				}()
 				return
 			}
 
-			// Case 2: Neither profile fields nor token are filled
+			// Case 2: Neither profile fields nor token are filled yet -> Enable fields so the user can fill them in
 			if !hasAnyProfileField() && tok == "" {
-				setCheckedSilent(false)
+				setEnabledSilent(true)
 				updateFieldStates()
-				err := errors.New("please fill in your profile fields (or enter an existing Community Token) before joining the community")
-				statusLabel.SetText("⚠️ " + err.Error())
-				dialog.ShowError(err, w)
+				data := currentData()
+				data.Enabled = true
+				_ = community.SaveCommunityData(data)
+				if onUpdate != nil {
+					onUpdate(data)
+				}
 				return
 			}
 
-			// Case 3: Profile fields are filled -> Validate, save locally, and publish to server
+			// Case 3: Profile fields are already filled -> Enable fields, validate, save locally, and publish to server
+			setEnabledSilent(true)
+			updateFieldStates()
 			if !validateInputs() {
-				setCheckedSilent(false)
-				updateFieldStates()
-				dialog.ShowError(errors.New("please fix validation errors before joining the community"), w)
 				return
 			}
 
 			data := currentData()
 			data.Enabled = true
 			if err := community.SaveCommunityData(data); err != nil {
-				setCheckedSilent(false)
-				updateFieldStates()
 				dialog.ShowError(fmt.Errorf("failed to save local preferences: %w", err), w)
 				return
 			}
+			if onUpdate != nil {
+				onUpdate(data)
+			}
 
-			updateFieldStates()
-			statusLabel.SetText("Publishing profile to community server...")
+			toggleBtn.Disable()
 			go func() {
 				err := community.SyncCommunityProfile(data)
 				fyne.Do(func() {
+					toggleBtn.Enable()
 					if err != nil {
-						setCheckedSilent(false)
-						data.Enabled = false
-						_ = community.SaveCommunityData(data)
-						updateFieldStates()
-						statusLabel.SetText("⚠️ Failed to publish profile: " + err.Error())
 						dialog.ShowError(err, w)
 						return
 					}
@@ -467,80 +456,64 @@ func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) 
 					if onUpdate != nil {
 						onUpdate(saved)
 					}
-					statusLabel.SetText("✅ Profile published to " + community.Endpoint() + " (uncheck to edit or remove from server).")
 				})
 			}()
 			return
 		}
 
-		// Unchecked (checked == false): Remove from community server, keep local fields & token editable
+		// OFF (targetState == false): Disable fields (keeping values visible & saved locally) and remove from community server
+		if syncTimer != nil {
+			syncTimer.Stop()
+		}
+		syncSeq++
 		idToDelete := currentID
+		setEnabledSilent(false)
 		localDraft := currentData()
 		localDraft.Enabled = false
 		_ = community.SaveCommunityData(localDraft)
 		updateFieldStates()
+		toggleBtn.Disable()
 
-		statusLabel.SetText("Removing profile data from community server...")
 		go func() {
 			delData := community.CommunityData{
 				ID:           idToDelete,
 				ArtisanToken: tok,
 				Enabled:      false,
 			}
-			err := community.SyncCommunityProfile(delData)
+			_ = community.SyncCommunityProfile(delData)
 			fyne.Do(func() {
+				toggleBtn.Enable()
 				if onUpdate != nil {
 					onUpdate(localDraft)
 				}
-				if err != nil {
-					statusLabel.SetText("⚠️ Disabled locally (fields editable), server error: " + err.Error())
-				} else {
-					statusLabel.SetText("✅ Data removed from community server. Local fields are preserved and editable; check the box to publish again.")
-				}
 			})
 		}()
-	}
+	})
 
 	// Load existing configuration
 	initial := community.LoadCommunityData()
 	populateFields(initial)
-	setCheckedSilent(initial.Enabled)
+	setEnabledSilent(initial.Enabled)
 	updateFieldStates()
-	if initial.Enabled {
-		statusLabel.SetText("✅ Community participation active (uncheck 'Join the Penguins Eggs Community' to edit or remove data from server).")
-	} else {
-		statusLabel.SetText("Edit your fields below and check 'Join the Penguins Eggs Community' to publish (or paste only your Token and check to import).")
-	}
 
-	// Socials Form in strictly alphabetical order:
-	// Facebook, Gitee, GitHub, Telegram, WeChat, WhatsApp, X
-	socialsForm := container.New(layout.NewFormLayout(),
-		checkFacebook, entryFacebook,
-		checkGitee, entryGitee,
-		checkGitHub, entryGitHub,
-		checkTelegram, entryTelegram,
-		checkWeChat, entryWeChat,
-		checkWhatsApp, entryWhatsApp,
-		checkX, entryX,
-	)
+	socialsForm := container.New(layout.NewFormLayout(), socialFormObjects...)
 
 	infoBtn := widget.NewButtonWithIcon("Info", theme.InfoIcon(), func() {
 		dialog.ShowInformation(
 			"Penguins Community",
 			"Join the global Penguins Eggs Community!\n\n"+
-				"• Check 'Join the Penguins Eggs Community' to publish your profile (or import an existing profile if only the Token field is filled).\n"+
-				"• Uncheck 'Join the Penguins Eggs Community' to remove your public data from the server while keeping your fields saved and editable locally.\n"+
+				"• When 'Join the Penguins Eggs Community' is OFF, your saved fields remain visible but disabled, and your public profile is removed from the server.\n"+
+				"• Switch 'Join the Penguins Eggs Community' to ON to enable editing and automatically save and publish your profile (or import an existing profile if only the Token field is filled).\n"+
 				"• Your private token is stored in ~/.ssh/penguins-community.secret (never in community.json/yaml).\n"+
 				"• No email address is requested or stored (anti-spam).",
 			w,
 		)
 	})
 
-	headerRow := container.NewHBox(checkEnabled, layout.NewSpacer(), infoBtn)
+	headerRow := container.NewHBox(toggleBtn, layout.NewSpacer(), infoBtn)
 
 	topBar := container.NewVBox(
 		headerRow,
-		statusLabel,
 		validationError,
 		widget.NewSeparator(),
 	)

@@ -115,6 +115,53 @@ func (ui *App) buildToolbarRow() *fyne.Container {
 		ui.resetExplanation,
 	)
 
+	toolbarActions := container.NewHBox(
+		ui.tbCreateISO,
+		widget.NewSeparator(),
+		ui.tbKill,
+		ui.tbClean,
+		ui.tbCook,
+		ui.tbGrub,
+	)
+	return container.NewBorder(nil, nil, toolbarActions, nil, layout.NewSpacer())
+}
+
+type topBarTabsLayout struct{}
+
+func (l *topBarTabsLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	if len(objects) == 0 {
+		return
+	}
+	tabs := objects[0]
+	tabs.Move(fyne.NewPos(0, 0))
+	tabs.Resize(size)
+
+	if len(objects) > 1 && objects[1] != nil {
+		right := objects[1]
+		rightMin := right.MinSize()
+		right.Resize(rightMin)
+		right.Move(fyne.NewPos(size.Width-rightMin.Width, 0))
+	}
+}
+
+func (l *topBarTabsLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	if len(objects) == 0 {
+		return fyne.NewSize(0, 0)
+	}
+	tabsMin := objects[0].MinSize()
+	if len(objects) > 1 && objects[1] != nil {
+		rightMin := objects[1].MinSize()
+		if tabsMin.Width < rightMin.Width {
+			tabsMin.Width = rightMin.Width
+		}
+		if tabsMin.Height < rightMin.Height {
+			tabsMin.Height = rightMin.Height
+		}
+	}
+	return tabsMin
+}
+
+func (ui *App) buildMainContent(tabs *container.AppTabs) *fyne.Container {
 	ui.tbDocs = newActionButton(
 		"Docs",
 		theme.HelpIcon(),
@@ -145,21 +192,6 @@ func (ui *App) buildToolbarRow() *fyne.Container {
 		ui.resetExplanation,
 	)
 
-	ui.tbCommunity = newActionButton(
-		"Community",
-		theme.AccountIcon(),
-		func() {
-			ui.setExplanation("Community: Configure optional participation before remastering.")
-			if ui.mainTabs != nil {
-				ui.mainTabs.SelectIndex(1)
-			}
-		},
-		func() {
-			ui.setExplanation("Community: Configure your profile and optional participation before remastering.")
-		},
-		ui.resetExplanation,
-	)
-
 	ui.tbQuit = newActionButton(
 		"Exit",
 		theme.LogoutIcon(),
@@ -170,17 +202,11 @@ func (ui *App) buildToolbarRow() *fyne.Container {
 		ui.resetExplanation,
 	)
 
-	toolbarActions := container.NewHBox(
-		ui.tbCreateISO,
-		widget.NewSeparator(),
-		ui.tbKill,
-		ui.tbClean,
-		ui.tbCook,
-		ui.tbGrub,
-		ui.tbCommunity,
-		widget.NewSeparator(),
+	rightActions := container.NewHBox(
 		ui.tbDocs,
 		ui.tbStats,
+		ui.tbQuit,
 	)
-	return container.NewBorder(nil, nil, toolbarActions, ui.tbQuit, layout.NewSpacer())
+
+	return container.New(&topBarTabsLayout{}, tabs, rightActions)
 }

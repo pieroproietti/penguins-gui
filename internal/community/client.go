@@ -11,6 +11,46 @@ import (
 	"time"
 )
 
+func doCommunityRequest(method, pathSuffix, token string, payload []byte) (*http.Response, error) {
+	endpoint := strings.TrimSuffix(Endpoint(), "/")
+	client := &http.Client{
+		Timeout: 7 * time.Second,
+	}
+
+	buildReq := func(baseURL string) (*http.Request, error) {
+		var bodyReader io.Reader
+		if payload != nil {
+			bodyReader = bytes.NewReader(payload)
+		}
+		req, err := http.NewRequest(method, baseURL+"/"+strings.TrimPrefix(pathSuffix, "/"), bodyReader)
+		if err != nil {
+			return nil, err
+		}
+		if payload != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if token != "" {
+			req.Header.Set("X-Eggs-Artisan-Token", token)
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		return req, nil
+	}
+
+	req, err := buildReq(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil && endpoint == DefaultCommunityEndpoint {
+		if reqFallback, fErr := buildReq(FallbackCommunityEndpoint); fErr == nil {
+			if fResp, fDoErr := client.Do(reqFallback); fDoErr == nil {
+				return fResp, nil
+			}
+		}
+	}
+	return resp, err
+}
+
 // SyncCommunityProfile communicates directly with /api/community:
 // If data.Enabled is true, it sends a PUT request to https://api.penguins-eggs.net/api/community/{id-or-uuid}.
 // If data.Enabled is false, it sends a DELETE request to https://api.penguins-eggs.net/api/community/{id-or-uuid}.
@@ -22,25 +62,11 @@ func SyncCommunityProfile(data CommunityData) error {
 		return errors.New("unable to determine machine UUID")
 	}
 
-	endpoint := Endpoint()
-	endpoint = strings.TrimSuffix(endpoint, "/")
-
-	client := &http.Client{
-		Timeout: 7 * time.Second,
-	}
-
 	tok := strings.TrimSpace(data.ArtisanToken)
 	if tok == "" {
 		if loaded := LoadCommunityData(); loaded.ArtisanToken != "" {
 			tok = strings.TrimSpace(loaded.ArtisanToken)
 			data.ArtisanToken = tok
-		}
-	}
-
-	setAuthHeaders := func(req *http.Request) {
-		if tok != "" {
-			req.Header.Set("X-Eggs-Artisan-Token", tok)
-			req.Header.Set("Authorization", "Bearer "+tok)
 		}
 	}
 
@@ -50,24 +76,7 @@ func SyncCommunityProfile(data CommunityData) error {
 	}
 
 	if !data.Enabled {
-		delURL := fmt.Sprintf("%s/%s", endpoint, targetID)
-		req, err := http.NewRequest(http.MethodDelete, delURL, nil)
-		if err != nil {
-			return err
-		}
-		setAuthHeaders(req)
-		resp, err := client.Do(req)
-		if err != nil && endpoint == DefaultCommunityEndpoint {
-			// Try fallback host
-			fallbackURL := fmt.Sprintf("%s/%s", FallbackCommunityEndpoint, targetID)
-			if reqFallback, fErr := http.NewRequest(http.MethodDelete, fallbackURL, nil); fErr == nil {
-				setAuthHeaders(reqFallback)
-				if fResp, fDoErr := client.Do(reqFallback); fDoErr == nil {
-					resp = fResp
-					err = nil
-				}
-			}
-		}
+		resp, err := doCommunityRequest(http.MethodDelete, targetID, tok, nil)
 		if err != nil {
 			return fmt.Errorf("network error removing profile: %w", err)
 		}
@@ -80,26 +89,21 @@ func SyncCommunityProfile(data CommunityData) error {
 	}
 
 	socials := make(map[string]string)
-	if s := CleanPlatformHandle("facebook", data.Socials.Facebook); s != "" {
-		socials["facebook"] = s
-	}
-	if s := CleanPlatformHandle("gitee", data.Socials.Gitee); s != "" {
-		socials["gitee"] = s
-	}
-	if s := CleanPlatformHandle("github", data.Socials.GitHub); s != "" {
-		socials["github"] = s
-	}
-	if s := CleanPlatformHandle("telegram", data.Socials.Telegram); s != "" {
-		socials["telegram"] = s
-	}
-	if s := CleanPlatformHandle("wechat", data.Socials.WeChat); s != "" {
-		socials["wechat"] = s
-	}
-	if s := CleanPlatformHandle("whatsapp", data.Socials.WhatsApp); s != "" {
-		socials["whatsapp"] = s
-	}
-	if s := CleanPlatformHandle("x", data.Socials.X); s != "" {
-		socials["x"] = s
+	for _, item := range []struct {
+		key string
+		val string
+	}{
+		{"facebook", data.Socials.Facebook},
+		{"gitee", data.Socials.Gitee},
+		{"github", data.Socials.GitHub},
+		{"telegram", data.Socials.Telegram},
+		{"wechat", data.Socials.WeChat},
+		{"whatsapp", data.Socials.WhatsApp},
+		{"x", data.Socials.X},
+	} {
+		if s := CleanPlatformHandle(item.key, item.val); s != "" {
+			socials[item.key] = s
+		}
 	}
 
 	payloadMap := map[string]interface{}{
@@ -124,27 +128,7 @@ func SyncCommunityProfile(data CommunityData) error {
 		return err
 	}
 
-	putURL := fmt.Sprintf("%s/%s", endpoint, targetID)
-	req, err := http.NewRequest(http.MethodPut, putURL, bytes.NewReader(payloadBytes))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	setAuthHeaders(req)
-
-	resp, err := client.Do(req)
-	if err != nil && endpoint == DefaultCommunityEndpoint {
-		// Try fallback host
-		fallbackURL := fmt.Sprintf("%s/%s", FallbackCommunityEndpoint, targetID)
-		if reqFallback, fErr := http.NewRequest(http.MethodPut, fallbackURL, bytes.NewReader(payloadBytes)); fErr == nil {
-			reqFallback.Header.Set("Content-Type", "application/json")
-			setAuthHeaders(reqFallback)
-			if fResp, fDoErr := client.Do(reqFallback); fDoErr == nil {
-				resp = fResp
-				err = nil
-			}
-		}
-	}
+	resp, err := doCommunityRequest(http.MethodPut, targetID, tok, payloadBytes)
 	if err != nil {
 		return fmt.Errorf("network error updating profile: %w", err)
 	}
@@ -195,33 +179,7 @@ func FetchProfileWithTokenData(token string) (*CommunityData, error) {
 		return nil, errors.New("artisan token cannot be empty")
 	}
 
-	endpoint := Endpoint()
-	endpoint = strings.TrimSuffix(endpoint, "/")
-
-	client := &http.Client{
-		Timeout: 7 * time.Second,
-	}
-
-	meURL := fmt.Sprintf("%s/me", endpoint)
-	req, err := http.NewRequest(http.MethodGet, meURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("X-Eggs-Artisan-Token", trimmedToken)
-	req.Header.Set("Authorization", "Bearer "+trimmedToken)
-
-	resp, err := client.Do(req)
-	if err != nil && endpoint == DefaultCommunityEndpoint {
-		fallbackURL := fmt.Sprintf("%s/me", FallbackCommunityEndpoint)
-		if reqFallback, fErr := http.NewRequest(http.MethodGet, fallbackURL, nil); fErr == nil {
-			reqFallback.Header.Set("X-Eggs-Artisan-Token", trimmedToken)
-			reqFallback.Header.Set("Authorization", "Bearer "+trimmedToken)
-			if fResp, fDoErr := client.Do(reqFallback); fDoErr == nil {
-				resp = fResp
-				err = nil
-			}
-		}
-	}
+	resp, err := doCommunityRequest(http.MethodGet, "me", trimmedToken, nil)
 	if err != nil {
 		return nil, fmt.Errorf("network error fetching profile: %w", err)
 	}

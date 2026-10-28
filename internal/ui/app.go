@@ -33,7 +33,7 @@ const (
 )
 
 var (
-	guiVersion = "v26.10.26"
+	guiVersion = "v26.10.28"
 	Author     = DefaultAuthor
 )
 
@@ -42,7 +42,7 @@ func GetGUIVersion() string {
 	if guiVersion != "" && guiVersion != "devel" {
 		return guiVersion
 	}
-	return "v26.10.26"
+	return "v26.10.28"
 }
 
 // App coordinates the Fyne window, widgets, state, and external tool adapters.
@@ -84,7 +84,6 @@ type App struct {
 	tbGrub      *actionButton
 	tbDocs      *actionButton
 	tbStats     *actionButton
-	tbCommunity *actionButton
 	tbQuit      *actionButton
 }
 
@@ -153,6 +152,7 @@ func Run(iconSVG []byte) {
 		container.NewTabItemWithIcon("Remaster", theme.DocumentCreateIcon(), remasterContent),
 		container.NewTabItemWithIcon("Community", theme.AccountIcon(), communityTabContent),
 	)
+	mainContent := ui.buildMainContent(ui.mainTabs)
 
 	ui.setupMenusAndShortcuts()
 	ui.setButtonsEnabled(true)
@@ -162,7 +162,7 @@ func Run(iconSVG []byte) {
 		ui.result.SetText(missingEggsMessage)
 	}
 
-	w.SetContent(ui.mainTabs)
+	w.SetContent(mainContent)
 	if ui.detectErr != nil {
 		message := widget.NewLabel(missingEggsMessage)
 		message.Wrapping = fyne.TextWrapWord
@@ -238,13 +238,6 @@ func (ui *App) setButtonsEnabled(enabled bool) {
 			ui.tbCook.Enable()
 		} else {
 			ui.tbCook.Disable()
-		}
-	}
-	if ui.tbCommunity != nil {
-		if enabled {
-			ui.tbCommunity.Enable()
-		} else {
-			ui.tbCommunity.Disable()
 		}
 	}
 	if ui.cookMenuItem != nil {
