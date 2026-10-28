@@ -1,3 +1,12 @@
+/*
+ * penguins-gui - Copyright (C) 2026-2026 Piero Proietti
+ * Author: Piero Proietti <piero.proietti@gmail.com>
+ * https://penguins-eggs.net
+ *
+ * This file is part of penguins-gui.
+ * Released under the GNU GPL v3 license.
+ */
+
 // Package system provides host package installation, bootloader detection, and GRUB operations for the GUI.
 package system
 
