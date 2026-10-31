@@ -1,5 +1,16 @@
 # Changelog
 
+## Release Notes: penguins-gui v26.10.31 - 2026-10-31
+
+### 🛠️ Unified Penguins Tools Installation
+
+* **Unified Repository & Tool Setup**: Replaced separate setup actions with **Edit → Install Penguins Tools**, configuring the official Penguins repository and installing both `penguins-eggs` and `penguins-chef` together.
+* **Auto-Activation**: Automatically detects newly installed tools and unlocks remaster actions without requiring an application restart.
+
+### 🧹 Streamlined Menus & Actions
+
+* **Removed Calamares Installer Action**: Removed the standalone Calamares installer script and its Edit menu entry to keep the interface focused on core Penguins tooling.
+
 ## Release Notes: penguins-gui v26.10.28 - 2026-10-28
 
 ### 🖥️ Toolbar & Top Bar Layout
