@@ -578,16 +578,6 @@ func (ui *App) chefAction() {
 		"Install penguins-chef?\n\nPackages will be downloaded from your configured repositories. On Arch/Manjaro this also performs the system upgrade required when refreshing package databases. If penguins-chef is unavailable, add the native Penguins’ Eggs repository first.", "")
 }
 
-func (ui *App) calamaresAction() {
-	executable, args, err := system.CalamaresCommand()
-	if err != nil {
-		dialog.ShowError(err, ui.win)
-		return
-	}
-	ui.runCommand("Install Calamares", executable, args,
-		"Install Calamares and the Qt/QML packages required by its slideshow?\n\nPackages will be downloaded from your configured repositories. If Calamares is unavailable, add the native Penguins’ Eggs repository first.", "")
-}
-
 func (ui *App) skelAction() {
 	ui.runToolCommand(
 		"Update /etc/skel",

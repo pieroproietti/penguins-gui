@@ -41,7 +41,6 @@ func (ui *App) setupMenusAndShortcuts() {
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Install penguins-egg CLI", func() { ui.repoAction("add") }),
 		fyne.NewMenuItem("Install penguins-chef", ui.chefAction),
-		fyne.NewMenuItem("Install calamares", ui.calamaresAction),
 		fyne.NewMenuItem("Update /etc/skel", ui.skelAction),
 		ui.grubMenuItem,
 	)

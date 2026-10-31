@@ -26,7 +26,6 @@ internals and does not modify Penguins' Eggs.
 - Run maintenance commands from menus and the action toolbar.
 - Configure the native Penguins' Eggs repository during CLI installation, without requiring Eggs.
 - Automatically install Penguins' Eggs after adding its repository and enable remaster actions without restarting.
-- Install Calamares and its Qt 5/Qt 6 slideshow dependencies from Edit.
 - Adjust font zoom and retain the preference between sessions.
 - Prevent closing the GUI while an operation is running.
 
@@ -46,10 +45,10 @@ intentionally outside this first prototype.
 See the official Fyne documentation for the development packages required by
 your distribution: <https://docs.fyne.io/started/>.
 
-## Repository and Calamares setup
+## Repository and system setup
 
-Edit contains four actions: **Install penguins-egg CLI**, **Install calamares**,
-**Update /etc/skel**, and **Boot without USB…**.
+Edit contains actions: **Install penguins-egg CLI**, **Install penguins-chef**,
+**Update /etc/skel**, and **Boot ISO…** (and recipe selection via **Cook…**).
 
 **Boot without USB…** is enabled only when startup through GRUB is detected
 from the kernel's boot information or EFI LoaderInfo. If those details are
@@ -79,23 +78,11 @@ partial upgrade. Repository setup uses `curl` and, on Debian, `gpg`; packaged
 builds include these dependencies. When running a standalone binary, those tools
 must already be installed.
 
-Use **Edit → Install calamares** to install Calamares using the host
-package manager. The GUI then detects the installed Calamares Qt version with
-`ldd` and installs the matching QML/Quick Controls runtime packages. Supported
-families are Debian/Ubuntu (including Devuan), Arch, Fedora/RHEL, openSUSE and
-Alpine. Ubuntu also receives `language-selector-common`; Alpine receives the
-separate installer modules. Packages must be available in configured repositories.
-
 Setup actions require confirmation and administrative authorization and stream
 their output into the GUI log. Installation stops on the first error; packages
 already installed remain installed, and the action can be retried after fixing
-the cause. Installing packages does not launch Calamares or change the selected
-installer in Eggs configuration. Eggs continues to manage branding and installer
-configuration during remastering.
-
-The package lists follow the legacy Eggs installer, with Qt 6 equivalents from
-the distribution catalogs, including [Debian QML modules](https://packages.debian.org/sid/qml6-module-qtqml-workerscript)
-and [Alpine Qt Declarative](https://pkgs.alpinelinux.org/package/edge/community/x86/qt6-qtdeclarative).
+the cause. Calamares can be installed as needed using Penguins Chef recipes
+(**Edit → Cook…**).
 
 ## Run during development
 
