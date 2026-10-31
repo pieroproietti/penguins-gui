@@ -130,7 +130,7 @@ func repositoryFixture(t *testing.T) (string, string) {
 	return root, script
 }
 
-func TestEggsInstallWithoutEggs(t *testing.T) {
+func TestToolsInstallWithoutTools(t *testing.T) {
 	for _, family := range []string{"debian", "ubuntu", "arch", "manjaro", "fedora", "el9", "suse", "alpine"} {
 		t.Run(family, func(t *testing.T) {
 			root := t.TempDir()
@@ -139,44 +139,25 @@ func TestEggsInstallWithoutEggs(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			cmd := exec.Command("/bin/sh", "-c", eggsInstallScript, "test", family)
+			cmd := exec.Command("/bin/sh", "-c", toolsInstallScript, "test", family)
 			cmd.Env = []string{"PATH=" + root}
 			out, err := cmd.CombinedOutput()
-			if err != nil || !strings.Contains(string(out), "penguins-eggs") {
+			if err != nil || !strings.Contains(string(out), "penguins-eggs") || !strings.Contains(string(out), "penguins-chef") {
 				t.Fatalf("%v: %s", err, out)
 			}
 		})
 	}
 }
 
-func TestChefInstall(t *testing.T) {
-	for _, family := range []string{"debian", "ubuntu", "arch", "manjaro", "fedora", "el9", "suse", "alpine"} {
-		t.Run(family, func(t *testing.T) {
-			root := t.TempDir()
-			for _, name := range []string{"apt-get", "pacman", "dnf", "zypper", "apk"} {
-				if err := os.WriteFile(filepath.Join(root, name), []byte("#!/bin/sh\necho \"$*\"\n"), 0755); err != nil {
-					t.Fatal(err)
-				}
-			}
-			cmd := exec.Command("/bin/sh", "-c", chefInstallScript, "test", family)
-			cmd.Env = []string{"PATH=" + root}
-			out, err := cmd.CombinedOutput()
-			if err != nil || !strings.Contains(string(out), "penguins-chef") {
-				t.Fatalf("%v: %s", err, out)
-			}
-		})
-	}
-}
-
-func TestRepositorySetupAutomaticallyInstallsEggs(t *testing.T) {
+func TestRepositorySetupAutomaticallyInstallsTools(t *testing.T) {
 	for _, tc := range []struct {
 		name, action                                      string
 		downloadFails, installFails, wantInstall, wantErr bool
 	}{
-		{name: "add installs Eggs", action: "add", wantInstall: true},
+		{name: "add installs tools", action: "add", wantInstall: true},
 		{name: "repository failure stops installation", action: "add", downloadFails: true, wantErr: true},
 		{name: "installation failure is reported", action: "add", installFails: true, wantInstall: true, wantErr: true},
-		{name: "remove does not install Eggs", action: "rm"},
+		{name: "remove does not install tools", action: "rm"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, _ := repositoryFixture(t)
@@ -210,7 +191,7 @@ if [ "$1" = install ] && [ "$INSTALL_FAILS" = true ]; then exit 42; fi
 			if err != nil && !os.IsNotExist(err) {
 				t.Fatal(err)
 			}
-			if got := strings.Contains(string(calls), "install --yes penguins-eggs"); got != tc.wantInstall {
+			if got := strings.Contains(string(calls), "install --yes penguins-eggs penguins-chef"); got != tc.wantInstall {
 				t.Fatalf("unexpected package commands: %s", calls)
 			}
 		})

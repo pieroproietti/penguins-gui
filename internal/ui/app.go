@@ -28,7 +28,7 @@ const (
 	ApplicationID      = "net.penguins-eggs.gui"
 	DefaultNest        = "/home/eggs"
 	DefaultAuthor      = "Piero Proietti <piero.proietti@gmail.com>"
-	missingEggsMessage = "The eggs command was not found in PATH. Use Edit → Install penguins-egg CLI to configure the repository and install it. ISO creation will become available after installation."
+	missingEggsMessage = "The eggs command was not found in PATH. Use Edit → Install Penguins Tools to configure the repository and install the suite (Eggs & Chef). ISO creation will become available after installation."
 	defaultExplanation = "Select or hover over an action to view its description."
 )
 
@@ -164,12 +164,16 @@ func Run(iconSVG []byte) {
 
 	w.SetContent(mainContent)
 	if ui.detectErr != nil {
-		message := widget.NewLabel(missingEggsMessage)
-		message.Wrapping = fyne.TextWrapWord
-		warning := dialog.NewCustom("penguins-eggs CLI not found", "OK", message, w)
-		warning.SetIcon(theme.WarningIcon())
-		warning.Resize(fyne.NewSize(480, 180))
-		warning.Show()
+		dialog.ShowConfirm(
+			"penguins-eggs CLI not found",
+			missingEggsMessage+"\n\nWould you like to install Penguins Tools now?",
+			func(confirmed bool) {
+				if confirmed {
+					ui.repoAction("add")
+				}
+			},
+			w,
+		)
 	}
 	w.ShowAndRun()
 }
@@ -482,7 +486,16 @@ func (ui *App) cookAction() {
 
 	chefPath, err := exec.LookPath("chef")
 	if err != nil {
-		dialog.ShowInformation("penguins-chef CLI not found", "The chef command was not found in PATH.\nPlease install penguins-chef to use the Cook feature.", ui.win)
+		dialog.ShowConfirm(
+			"penguins-chef CLI not found",
+			"The chef command was not found in PATH.\n\nWould you like to install Penguins Tools (Eggs & Chef) now?",
+			func(confirmed bool) {
+				if confirmed {
+					ui.repoAction("add")
+				}
+			},
+			ui.win,
+		)
 		return
 	}
 
@@ -556,7 +569,7 @@ func (ui *App) grubAction() {
 }
 
 func (ui *App) repoAction(action string) {
-	title, prompt := "Install penguins-eggs CLI", "Add the official repository and signing keys, then automatically install Penguins’ Eggs?\n\nOn Arch/Manjaro this also performs the system upgrade required when refreshing package databases."
+	title, prompt := "Install Penguins Tools", "Add the official repository and signing keys, then automatically install Penguins’ Eggs and Penguins Chef?\n\nOn Arch/Manjaro this also performs the system upgrade required when refreshing package databases."
 	if action == "rm" {
 		title, prompt = "Remove native repository", "Remove the official Penguins’ Eggs repository? Shared RPM/Pacman signing keys will be retained."
 	}
@@ -566,16 +579,6 @@ func (ui *App) repoAction(action string) {
 		return
 	}
 	ui.runCommand(title, executable, args, prompt, "")
-}
-
-func (ui *App) chefAction() {
-	executable, args, err := system.ChefCommand()
-	if err != nil {
-		dialog.ShowError(err, ui.win)
-		return
-	}
-	ui.runCommand("Install penguins-chef", executable, args,
-		"Install penguins-chef?\n\nPackages will be downloaded from your configured repositories. On Arch/Manjaro this also performs the system upgrade required when refreshing package databases. If penguins-chef is unavailable, add the native Penguins’ Eggs repository first.", "")
 }
 
 func (ui *App) skelAction() {
