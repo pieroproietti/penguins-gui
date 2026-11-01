@@ -10,15 +10,12 @@
 package ui
 
 import (
-	"fmt"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/pieroproietti/penguins-gui/internal/community"
 	"github.com/pieroproietti/penguins-gui/internal/eggs"
 )
 
@@ -71,21 +68,9 @@ func (ui *App) buildRemasterTab() *fyne.Container {
 	toolbarRow := ui.buildToolbarRow()
 	statusBar := container.NewBorder(nil, nil, widget.NewIcon(theme.InfoIcon()), nil, ui.explanationLabel)
 
-	ui.communityBtn = widget.NewButtonWithIcon("Community: Disabled", theme.AccountIcon(), func() {
-		if ui.mainTabs != nil {
-			ui.mainTabs.SelectIndex(1)
-		}
-	})
-	ui.communityBtn.Importance = widget.LowImportance
-
 	modeRow := container.NewBorder(
 		nil, nil,
-		container.NewHBox(
-			ui.mode,
-			widget.NewSeparator(),
-			ui.communityBtn,
-			widget.NewSeparator(),
-		),
+		ui.mode,
 		nil,
 		modeHelp,
 	)
@@ -110,22 +95,4 @@ func (ui *App) buildRemasterTab() *fyne.Container {
 	)
 
 	return container.NewPadded(container.NewBorder(topControls, footer, nil, nil, ui.logView.Scroll))
-}
-
-func (ui *App) updateCommunityStatus(data community.CommunityData) {
-	if ui.communityBtn == nil {
-		return
-	}
-	if data.Enabled {
-		nick := data.Nickname
-		if nick == "" {
-			nick = "Anonymous"
-		}
-		ui.communityBtn.SetText(fmt.Sprintf("Community: @%s", nick))
-		ui.communityBtn.Importance = widget.MediumImportance
-	} else {
-		ui.communityBtn.SetText("Community: Disabled")
-		ui.communityBtn.Importance = widget.LowImportance
-	}
-	ui.communityBtn.Refresh()
 }

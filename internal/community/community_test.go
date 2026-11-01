@@ -1,387 +1,251 @@
+/*
+ * penguins-gui - Copyright (C) 2026-2026 Piero Proietti
+ * Author: Piero Proietti <piero.proietti@gmail.com>
+ * https://penguins-eggs.net
+ *
+ * This file is part of penguins-gui.
+ * Released under the GNU GPL v3 license.
+ */
+
 package community
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestCleanSourceURLAndIsValidURL(t *testing.T) {
-	cases := []struct {
-		input       string
-		cleaned     string
-		shouldValid bool
-	}{
-		{"https://github.com/pieroproietti/penguins-eggs", "https://github.com/pieroproietti/penguins-eggs", true},
-		{"http://my-distro.org", "http://my-distro.org", true},
-		{"https//github.com/pieroproietti/penguins-gui", "https://github.com/pieroproietti/penguins-gui", true},
-		{"github.com/distro/linux", "https://github.com/distro/linux", true},
-		{"sourceforge.net/projects/eggs", "https://sourceforge.net/projects/eggs", true},
-		{"", "", false},
-		{"   ", "", false},
-		{"not-a-domain", "https://not-a-domain", false},
-		{"ftp://invalid-scheme.org", "ftp://invalid-scheme.org", false},
+func TestComputeAuthorID(t *testing.T) {
+	testEmail := "  Artisan.Penguin@Example.COM  "
+	expectedClean := "artisan.penguin@example.com"
+	expectedSum := sha256.Sum256([]byte(expectedClean))
+	expectedHex := hex.EncodeToString(expectedSum[:])
+
+	authorID := ComputeAuthorID(testEmail)
+	if authorID != expectedHex {
+		t.Errorf("ComputeAuthorID(%q) = %q, expected %q", testEmail, authorID, expectedHex)
 	}
 
-	for _, tc := range cases {
-		cleaned := CleanSourceURL(tc.input)
-		if cleaned != tc.cleaned {
-			t.Errorf("CleanSourceURL(%q) = %q, expected %q", tc.input, cleaned, tc.cleaned)
-		}
-		valid := IsValidURL(cleaned)
-		if valid != tc.shouldValid {
-			t.Errorf("IsValidURL(%q) = %v, expected %v", cleaned, valid, tc.shouldValid)
-		}
+	if emptyID := ComputeAuthorID("   "); emptyID != "" {
+		t.Errorf("expected empty string for blank email, got %q", emptyID)
 	}
 }
 
-func TestBioCharacterLimit(t *testing.T) {
-	validBio := strings.Repeat("A", 200)
-	invalidBio := strings.Repeat("A", 201)
+func TestGravatarURL(t *testing.T) {
+	email := "user@example.org"
+	expectedHash := ComputeAuthorID(email)
+	url := GravatarURL(email, 96)
 
-	validData := CommunityData{
-		Enabled:   true,
-		SourceURL: "https://github.com/distro/linux",
-		Bio:       validBio,
+	if !strings.Contains(url, "https://www.gravatar.com/avatar/"+expectedHash) {
+		t.Errorf("expected Gravatar URL containing hash %s, got %s", expectedHash, url)
 	}
-	if err := ValidateCommunityData(validData); err != nil {
-		t.Errorf("expected 200-char bio to be valid, got: %v", err)
+	if !strings.Contains(url, "s=96") {
+		t.Errorf("expected size s=96 in URL, got %s", url)
 	}
-
-	invalidData := validData
-	invalidData.Bio = invalidBio
-	if err := ValidateCommunityData(invalidData); err == nil {
-		t.Errorf("expected 201-char bio to fail validation")
+	if !strings.Contains(url, "d=identicon") {
+		t.Errorf("expected fallback identicon in URL, got %s", url)
 	}
 }
 
-func TestCleanPlatformHandle(t *testing.T) {
-	cases := []struct {
-		platform string
-		input    string
-		expected string
-	}{
-		{"facebook", "pierofb", "pierofb"},
-		{"facebook", "https://facebook.com/pierofb", "pierofb"},
-		{"facebook", "https//facebook.com/pierofb", "pierofb"},
-		{"gitee", "piero", "piero"},
-		{"gitee", "https://gitee.com/piero", "piero"},
-		{"gitee", "https//gitee.com/piero", "piero"},
-		{"github", "pieroproietti", "pieroproietti"},
-		{"github", "@pieroproietti", "pieroproietti"},
-		{"github", "github.com/pieroproietti", "pieroproietti"},
-		{"github", "https://github.com/pieroproietti", "pieroproietti"},
-		{"github", "https//github.com/pieroproietti", "pieroproietti"},
-		{"github", "http://github.com/pieroproietti/", "pieroproietti"},
-		{"github", "www.github.com/pieroproietti", "pieroproietti"},
-		{"telegram", "ziopele", "@ziopele"},
-		{"telegram", "@ziopele", "@ziopele"},
-		{"telegram", "t.me/ziopele", "@ziopele"},
-		{"telegram", "https://t.me/ziopele", "@ziopele"},
-		{"wechat", "wxid_123456", "wxid_123456"},
-		{"whatsapp", "+39333123456", "+39333123456"},
-		{"whatsapp", "+39 333 123456", "+39333123456"},
-		{"whatsapp", "https://wa.me/39333123456", "39333123456"},
-		{"x", "pierox", "@pierox"},
-		{"x", "@pierox", "@pierox"},
-		{"x", "x.com/pierox", "@pierox"},
-		{"x", "https://twitter.com/pierox", "@pierox"},
+func TestIsValidEmail(t *testing.T) {
+	valid := []string{
+		"artisan@penguins-eggs.net",
+		"tux.artisan@sub.example.com",
+		"user+tag@domain.co.uk",
+	}
+	for _, em := range valid {
+		if !IsValidEmail(em) {
+			t.Errorf("expected %q to be valid email", em)
+		}
 	}
 
-	for _, tc := range cases {
-		got := CleanPlatformHandle(tc.platform, tc.input)
-		if got != tc.expected {
-			t.Errorf("CleanPlatformHandle(%q, %q) = %q, expected %q", tc.platform, tc.input, got, tc.expected)
+	invalid := []string{
+		"",
+		"   ",
+		"not-an-email",
+		"user@domain",
+		"@domain.com",
+		"user@",
+	}
+	for _, em := range invalid {
+		if IsValidEmail(em) {
+			t.Errorf("expected %q to be invalid email", em)
 		}
 	}
 }
 
-func TestFormatContactAndAlphabeticalComputePrimaryContact(t *testing.T) {
-	typoInput := "https//github.com/pieroproietti"
-	if got := FormatContact("github", typoInput); got != "https://github.com/pieroproietti" {
-		t.Errorf("expected 'https://github.com/pieroproietti', got %q", got)
-	}
-
-	if got := FormatContact("facebook", "pierofb"); got != "https://facebook.com/pierofb" {
-		t.Errorf("expected 'https://facebook.com/pierofb', got %q", got)
-	}
-	if got := FormatContact("gitee", "piero"); got != "https://gitee.com/piero" {
-		t.Errorf("expected 'https://gitee.com/piero', got %q", got)
-	}
-	if got := FormatContact("github", "pieroproietti"); got != "https://github.com/pieroproietti" {
-		t.Errorf("expected 'https://github.com/pieroproietti', got %q", got)
-	}
-	if got := FormatContact("telegram", "piero"); got != "@piero" {
-		t.Errorf("expected '@piero', got %q", got)
-	}
-	if got := FormatContact("wechat", "wxid_test"); got != "wxid_test" {
-		t.Errorf("expected 'wxid_test', got %q", got)
-	}
-	if got := FormatContact("whatsapp", "+393331234567"); got != "https://wa.me/393331234567" {
-		t.Errorf("expected 'https://wa.me/393331234567', got %q", got)
-	}
-	if got := FormatContact("x", "pierox"); got != "@pierox" {
-		t.Errorf("expected '@pierox', got %q", got)
-	}
-
-	socialsFB := CommunitySocials{
-		Facebook: "pierofb",
-		GitHub:   "pieroproietti",
-		Telegram: "@ziopele",
-	}
-	primaryFB := ComputePrimaryContact(socialsFB)
-	if primaryFB != "https://facebook.com/pierofb" {
-		t.Errorf("expected alphabetical first to be Facebook, got %q", primaryFB)
-	}
-
-	socialsGitee := CommunitySocials{
-		Gitee:    "pierocn",
-		GitHub:   "pieroproietti",
-		Telegram: "@ziopele",
-	}
-	primaryGitee := ComputePrimaryContact(socialsGitee)
-	if primaryGitee != "https://gitee.com/pierocn" {
-		t.Errorf("expected alphabetical first to be Gitee, got %q", primaryGitee)
-	}
-
-	socialsGitHub := CommunitySocials{
-		GitHub:   "pieroproietti",
-		Telegram: "@ziopele",
-		X:        "@pierox",
-	}
-	primaryGitHub := ComputePrimaryContact(socialsGitHub)
-	if primaryGitHub != "https://github.com/pieroproietti" {
-		t.Errorf("expected alphabetical first to be GitHub, got %q", primaryGitHub)
-	}
-
-	socialsTelegram := CommunitySocials{
-		Telegram: "@ziopele",
-		WeChat:   "wxid_test",
-		WhatsApp: "+393331234567",
-		X:        "@pierox",
-	}
-	primaryTelegram := ComputePrimaryContact(socialsTelegram)
-	if primaryTelegram != "@ziopele" {
-		t.Errorf("expected alphabetical first to be Telegram, got %q", primaryTelegram)
-	}
-}
-
-func TestValidateCommunityData(t *testing.T) {
-	disabled := CommunityData{Enabled: false}
-	if err := ValidateCommunityData(disabled); err != nil {
-		t.Errorf("expected disabled to be valid without email or source, got %v", err)
-	}
-
-	enabledInvalidSource := CommunityData{
-		Enabled:   true,
-		SourceURL: "http//invalid-url",
-	}
-	if err := ValidateCommunityData(enabledInvalidSource); err == nil {
-		t.Errorf("expected error when source_url is invalid")
-	}
-
-	validData := CommunityData{
-		Enabled:   true,
-		Nickname:  "tux_artisan",
-		Location:  "Rome, IT",
-		SourceURL: "https://github.com/distro/linux",
-		Bio:       "Linux distro artisan",
-		Socials: CommunitySocials{
-			GitHub: "pieroproietti",
-		},
-	}
-	if err := ValidateCommunityData(validData); err != nil {
-		t.Errorf("unexpected error on valid community data: %v", err)
-	}
-
-	emailInSource := validData
-	emailInSource.SourceURL = "mailto:admin@distro.org"
-	if err := ValidateCommunityData(emailInSource); err == nil {
-		t.Errorf("expected error when email is entered in source URL")
-	}
-
-	emailInGitHub := validData
-	emailInGitHub.Socials.GitHub = "user@example.com"
-	if err := ValidateCommunityData(emailInGitHub); err == nil {
-		t.Errorf("expected error when email is entered in social field")
-	}
-
-	emailInNick := validData
-	emailInNick.Nickname = "user@example.com"
-	if err := ValidateCommunityData(emailInNick); err == nil {
-		t.Errorf("expected error when email is entered in nickname")
-	}
-
-	emailInBio := validData
-	emailInBio.Bio = "Contact me at hello@domain.org"
-	if err := ValidateCommunityData(emailInBio); err == nil {
-		t.Errorf("expected error when email is entered in bio")
-	}
-
-	fediData := validData
-	fediData.Socials.X = "@artisan@fosstodon.org"
-	if err := ValidateCommunityData(fediData); err != nil {
-		t.Errorf("expected Fediverse handle to be allowed, got: %v", err)
-	}
-}
-
-func TestSaveAndLoadCommunityData(t *testing.T) {
+func TestStorageNoTokenOnDisk(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
 
-	initial := LoadCommunityData()
-	if initial.Enabled {
-		t.Errorf("expected initial Enabled to be false")
-	}
-
 	data := CommunityData{
-		Enabled:   true,
-		Nickname:  "tux_artisan",
-		Location:  "Rome, IT",
-		SourceURL: "https//github.com/pieroproietti/penguins-gui",
-		Socials: CommunitySocials{
-			Facebook: "pierofb",
-			Gitee:    "pierocn",
-			GitHub:   "https//github.com/pieroproietti",
-			Telegram: "@ziopele",
-			WeChat:   "wx_artisan",
-			WhatsApp: "+39 333 1234567",
-			X:        "@pierox",
-		},
-		Bio: "Penguins Eggs builder and Linux artisan",
+		AuthorID:     ComputeAuthorID("artisan@example.com"),
+		Email:        "artisan@example.com",
+		Enabled:      true,
+		ArtisanToken: "egg_pat_super_secret_in_memory_only",
 	}
 
 	if err := SaveCommunityData(data); err != nil {
 		t.Fatalf("SaveCommunityData failed: %v", err)
 	}
 
-	cfgFile := filepath.Join(tmpDir, "config", "penguins-eggs", "community.json")
-	if _, err := os.Stat(cfgFile); err != nil {
+	cfgDir := filepath.Join(tmpDir, "config", "penguins-eggs")
+	jsonPath := filepath.Join(cfgDir, "community.json")
+	yamlPath := filepath.Join(cfgDir, "community.yaml")
+
+	jsonBytes, err := os.ReadFile(jsonPath)
+	if err != nil {
 		t.Fatalf("community.json was not created: %v", err)
 	}
+	if strings.Contains(string(jsonBytes), "egg_pat_") || strings.Contains(string(jsonBytes), "ArtisanToken") {
+		t.Errorf("community.json must NEVER contain the secret token: %s", string(jsonBytes))
+	}
 
-	yamlFile := filepath.Join(tmpDir, "config", "penguins-eggs", "community.yaml")
-	yamlBytes, err := os.ReadFile(yamlFile)
+	yamlBytes, err := os.ReadFile(yamlPath)
 	if err != nil {
 		t.Fatalf("community.yaml was not created: %v", err)
 	}
-	if strings.Contains(string(yamlBytes), "email") {
-		t.Errorf("community.yaml should NOT contain email: %s", string(yamlBytes))
+	if strings.Contains(string(yamlBytes), "egg_pat_") || strings.Contains(string(yamlBytes), "artisan_token") {
+		t.Errorf("community.yaml must NEVER contain the secret token: %s", string(yamlBytes))
 	}
 
+	// Verify no secret file was written to disk in ~/.ssh
+	secretPath := filepath.Join(tmpDir, ".ssh", "penguins-community.secret")
+	if _, err := os.Stat(secretPath); !os.IsNotExist(err) {
+		t.Errorf("secret file must NOT exist on disk: %s", secretPath)
+	}
+
+	// Verify LoadCommunityData returns token as empty
 	loaded := LoadCommunityData()
+	if loaded.ArtisanToken != "" {
+		t.Errorf("expected loaded.ArtisanToken to be empty, got %q", loaded.ArtisanToken)
+	}
+	if loaded.Email != "artisan@example.com" {
+		t.Errorf("expected loaded.Email to be 'artisan@example.com', got %q", loaded.Email)
+	}
+	if loaded.AuthorID != data.AuthorID {
+		t.Errorf("expected loaded.AuthorID to match %q, got %q", data.AuthorID, loaded.AuthorID)
+	}
 	if !loaded.Enabled {
-		t.Fatalf("expected loaded.Enabled == true")
-	}
-	if loaded.Nickname != "tux_artisan" {
-		t.Errorf("expected nickname 'tux_artisan', got %q", loaded.Nickname)
-	}
-	if loaded.SourceURL != "https://github.com/pieroproietti/penguins-gui" {
-		t.Errorf("expected cleaned source_url 'https://github.com/pieroproietti/penguins-gui', got %q", loaded.SourceURL)
-	}
-	if loaded.Bio != "Penguins Eggs builder and Linux artisan" {
-		t.Errorf("expected bio to match, got %q", loaded.Bio)
-	}
-	if loaded.Socials.GitHub != "pieroproietti" {
-		t.Errorf("expected cleaned github 'pieroproietti', got %q", loaded.Socials.GitHub)
-	}
-	if loaded.Socials.WhatsApp != "+393331234567" {
-		t.Errorf("expected cleaned whatsapp '+393331234567', got %q", loaded.Socials.WhatsApp)
-	}
-	if loaded.Contact != "https://facebook.com/pierofb" {
-		t.Errorf("expected primary contact 'https://facebook.com/pierofb', got %q", loaded.Contact)
+		t.Errorf("expected loaded.Enabled == true")
 	}
 }
 
-func TestEmailNeverExposedInContact(t *testing.T) {
-	socials := CommunitySocials{
-		Telegram: "@ziopele",
-	}
-	contact := ComputePrimaryContact(socials)
-	if strings.Contains(contact, "@") && strings.Contains(contact, ".") && !strings.HasPrefix(contact, "@") {
-		t.Errorf("contact looks like an exposed email: %s", contact)
-	}
-
-	socialsEmpty := CommunitySocials{}
-	emptyContact := ComputePrimaryContact(socialsEmpty)
-	if emptyContact != "" {
-		t.Errorf("contact should be empty when no socials are provided, got %q", emptyContact)
-	}
-}
-
-func TestBackwardCompatibilityWithMalformedCommunityYaml(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
-
-	cfgDir := filepath.Join(tmpDir, "config", "penguins-eggs")
-	_ = os.MkdirAll(cfgDir, 0755)
-
-	malformedYAML := []byte(`community:
-  bio: Linux Artisan
-  contact: github.com/https//github.com/pieroproietti
-  enabled: true
-  email: artisan@example.com
-  location: Rome, IT
-  nickname: artisan
-  source_url: https//github.com/pieroproietti/penguins-eggs
-  socials:
-    github: https//github.com/pieroproietti
-    telegram: '@pieroproietti'
-`)
-	_ = os.WriteFile(filepath.Join(cfgDir, "community.yaml"), malformedYAML, 0644)
-
-	loaded := LoadCommunityData()
-	if !loaded.Enabled {
-		t.Fatalf("expected loaded.Enabled == true")
-	}
-	if loaded.SourceURL != "https://github.com/pieroproietti/penguins-eggs" {
-		t.Errorf("expected cleaned source_url 'https://github.com/pieroproietti/penguins-eggs', got %q", loaded.SourceURL)
-	}
-	if loaded.Socials.GitHub != "pieroproietti" {
-		t.Errorf("expected cleaned github 'pieroproietti', got %q", loaded.Socials.GitHub)
-	}
-	if loaded.Contact != "https://github.com/pieroproietti" {
-		t.Errorf("expected corrected contact 'https://github.com/pieroproietti', got %q", loaded.Contact)
-	}
-
-	if err := SaveCommunityData(loaded); err != nil {
-		t.Fatalf("SaveCommunityData failed: %v", err)
-	}
-
-	savedBytes, err := os.ReadFile(filepath.Join(cfgDir, "community.json"))
+func TestStorageSudoUser(t *testing.T) {
+	curr, err := user.Current()
 	if err != nil {
-		t.Fatalf("expected community.json to exist: %v", err)
+		t.Skip("unable to get current user")
 	}
-	savedStr := string(savedBytes)
-	if strings.Contains(savedStr, "github.com/https") {
-		t.Errorf("saved JSON still contains invalid string: %s", savedStr)
+
+	t.Setenv("SUDO_USER", curr.Username)
+	t.Setenv("SUDO_UID", curr.Uid)
+	t.Setenv("SUDO_GID", curr.Gid)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(curr.HomeDir, ".config-test-penguins"))
+
+	cfgDir, err := getEggsConfigDir()
+	if err != nil {
+		t.Fatalf("getEggsConfigDir failed: %v", err)
 	}
-	if strings.Contains(savedStr, `"email"`) {
-		t.Errorf("saved JSON should NOT contain email: %s", savedStr)
-	}
-	if !strings.Contains(savedStr, `"source_url": "https://github.com/pieroproietti/penguins-eggs"`) {
-		t.Errorf("saved JSON missing source_url: %s", savedStr)
+	expected := filepath.Join(curr.HomeDir, ".config-test-penguins", "penguins-eggs")
+	if cfgDir != expected {
+		t.Errorf("expected %s, got %s", expected, cfgDir)
 	}
 }
 
-func TestSyncCommunityProfile(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
+func TestStorageSudoUserRootXDG(t *testing.T) {
+	curr, err := user.Current()
+	if err != nil {
+		t.Skip("unable to get current user")
+	}
 
-	var lastMethod string
-	var lastPath string
+	t.Setenv("SUDO_USER", curr.Username)
+	t.Setenv("SUDO_UID", curr.Uid)
+	t.Setenv("SUDO_GID", curr.Gid)
+	t.Setenv("XDG_CONFIG_HOME", "/root/.config")
+
+	cfgDir, err := getEggsConfigDir()
+	if err != nil {
+		t.Fatalf("getEggsConfigDir failed: %v", err)
+	}
+	expected := filepath.Join(curr.HomeDir, ".config", "penguins-eggs")
+	if cfgDir != expected {
+		t.Errorf("expected %s ignoring /root/.config, got %s", expected, cfgDir)
+	}
+}
+
+func TestSyncCommunityProfile_CaseA_TOFU(t *testing.T) {
+	var lastMethod, lastPath string
+	var lastHeaders http.Header
 	var lastBody []byte
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		lastMethod = r.Method
 		lastPath = r.URL.Path
-		body, _ := io.ReadAll(r.Body)
-		lastBody = body
+		lastHeaders = r.Header.Clone()
+		lastBody, _ = io.ReadAll(r.Body)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"status":"ok", "author_id":"12345", "artisan_token":"egg_pat_tofu_generated_123"}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("EGGS_COMMUNITY_ENDPOINT", srv.URL+"/api/community")
+
+	email := "new.artisan@example.com"
+	authorID := ComputeAuthorID(email)
+	data := CommunityData{
+		AuthorID:     authorID,
+		Email:        email,
+		Enabled:      true,
+		ArtisanToken: "", // Case A: empty token
+	}
+
+	newTok, err := SyncCommunityProfile(data)
+	if err != nil {
+		t.Fatalf("SyncCommunityProfile Case A failed: %v", err)
+	}
+
+	if newTok != "egg_pat_tofu_generated_123" {
+		t.Errorf("expected generated token 'egg_pat_tofu_generated_123', got %q", newTok)
+	}
+
+	if lastMethod != http.MethodPut {
+		t.Errorf("expected PUT method, got %s", lastMethod)
+	}
+	if !strings.HasSuffix(lastPath, "/"+authorID) {
+		t.Errorf("expected path ending in %s, got %s", authorID, lastPath)
+	}
+	if tokHeader := lastHeaders.Get("X-Eggs-Artisan-Token"); tokHeader != "" {
+		t.Errorf("expected no X-Eggs-Artisan-Token header on TOFU, got %s", tokHeader)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(lastBody, &payload); err != nil {
+		t.Fatalf("failed to unmarshal request payload: %v", err)
+	}
+	if payload["author_id"] != authorID {
+		t.Errorf("expected payload author_id %s, got %v", authorID, payload["author_id"])
+	}
+	if payload["email"] != email {
+		t.Errorf("expected payload email %s, got %v", email, payload["email"])
+	}
+}
+
+func TestSyncCommunityProfile_CaseB_WithToken(t *testing.T) {
+	var lastHeaders http.Header
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lastHeaders = r.Header.Clone()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
@@ -390,49 +254,91 @@ func TestSyncCommunityProfile(t *testing.T) {
 
 	t.Setenv("EGGS_COMMUNITY_ENDPOINT", srv.URL+"/api/community")
 
+	email := "existing.artisan@example.com"
 	data := CommunityData{
-		Enabled:   true,
-		Nickname:  "artisan_sync",
-		Location:  "Rome, IT",
-		SourceURL: "https://github.com/artisan/distro",
-		Bio:       "Distro creator",
-		Socials: CommunitySocials{
-			GitHub: "artisan",
-		},
-	}
-	if err := SyncCommunityProfile(data); err != nil {
-		t.Fatalf("SyncCommunityProfile enabled failed: %v", err)
+		AuthorID:     ComputeAuthorID(email),
+		Email:        email,
+		Enabled:      true,
+		ArtisanToken: "egg_pat_existing_secret_999",
 	}
 
-	if lastMethod != http.MethodPut {
-		t.Errorf("expected PUT method, got %s", lastMethod)
-	}
-	if !strings.HasPrefix(lastPath, "/api/community/") {
-		t.Errorf("expected path starting with /api/community/, got %s", lastPath)
-	}
-	var sentPayload map[string]interface{}
-	if err := json.Unmarshal(lastBody, &sentPayload); err != nil {
-		t.Fatalf("failed to parse sent JSON: %v", err)
-	}
-	if sentPayload["nickname"] != "artisan_sync" || sentPayload["location"] != "Rome, IT" {
-		t.Errorf("unexpected payload content: %+v", sentPayload)
-	}
-	if _, hasEmail := sentPayload["email"]; hasEmail {
-		t.Errorf("sent payload must NEVER include email field")
+	_, err := SyncCommunityProfile(data)
+	if err != nil {
+		t.Fatalf("SyncCommunityProfile Case B failed: %v", err)
 	}
 
-	dataDisabled := CommunityData{
-		Enabled: false,
+	if sent := lastHeaders.Get("X-Eggs-Artisan-Token"); sent != "egg_pat_existing_secret_999" {
+		t.Errorf("expected X-Eggs-Artisan-Token 'egg_pat_existing_secret_999', got %q", sent)
 	}
-	if err := SyncCommunityProfile(dataDisabled); err != nil {
-		t.Fatalf("SyncCommunityProfile disabled failed: %v", err)
+	if auth := lastHeaders.Get("Authorization"); auth != "Bearer egg_pat_existing_secret_999" {
+		t.Errorf("expected Authorization 'Bearer egg_pat_existing_secret_999', got %q", auth)
+	}
+}
+
+func TestSyncCommunityProfile_CaseB_401Unauthorized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("EGGS_COMMUNITY_ENDPOINT", srv.URL+"/api/community")
+
+	data := CommunityData{
+		Email:        "someone_else@example.com",
+		Enabled:      true,
+		ArtisanToken: "",
+	}
+
+	_, err := SyncCommunityProfile(data)
+	if !errors.Is(err, ErrUnauthorizedEmail) {
+		t.Errorf("expected ErrUnauthorizedEmail, got %v", err)
+	}
+}
+
+func TestSyncCommunityProfile_CaseC_Deactivation(t *testing.T) {
+	var lastMethod string
+	var lastHeaders http.Header
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lastMethod = r.Method
+		lastHeaders = r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	t.Setenv("EGGS_COMMUNITY_ENDPOINT", srv.URL+"/api/community")
+
+	email := "artisan@example.com"
+	// Missing token on deactivation must fail
+	dataNoToken := CommunityData{
+		AuthorID:     ComputeAuthorID(email),
+		Email:        email,
+		Enabled:      false,
+		ArtisanToken: "",
+	}
+	_, errNoTok := SyncCommunityProfile(dataNoToken)
+	if !errors.Is(errNoTok, ErrTokenRequired) {
+		t.Errorf("expected ErrTokenRequired, got %v", errNoTok)
+	}
+
+	// Deactivation with token
+	dataWithToken := CommunityData{
+		AuthorID:     ComputeAuthorID(email),
+		Email:        email,
+		Enabled:      false,
+		ArtisanToken: "egg_pat_delete_auth_123",
+	}
+	_, err := SyncCommunityProfile(dataWithToken)
+	if err != nil {
+		t.Fatalf("deactivation failed: %v", err)
 	}
 
 	if lastMethod != http.MethodDelete {
 		t.Errorf("expected DELETE method, got %s", lastMethod)
 	}
-	if !strings.HasPrefix(lastPath, "/api/community/") {
-		t.Errorf("expected path starting with /api/community/, got %s", lastPath)
+	if sent := lastHeaders.Get("X-Eggs-Artisan-Token"); sent != "egg_pat_delete_auth_123" {
+		t.Errorf("expected token on DELETE header, got %q", sent)
 	}
 }
 
@@ -443,150 +349,5 @@ func TestGetMachineUUID(t *testing.T) {
 	}
 	if len(uuid) < 8 {
 		t.Errorf("GetMachineUUID returned unexpectedly short string: %s", uuid)
-	}
-}
-
-func TestTokenHeaderAndAutoCapture(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
-
-	var lastHeaders http.Header
-	var responseJSON string
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		lastHeaders = r.Header.Clone()
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(responseJSON))
-	}))
-	defer srv.Close()
-
-	t.Setenv("EGGS_COMMUNITY_ENDPOINT", srv.URL+"/api/community")
-
-	responseJSON = `{"status":"ok","id":"distro-artist","artisan_token":"egg_pat_generated987"}`
-	initialData := CommunityData{
-		Enabled:  true,
-		Nickname: "distro-artist",
-		Location: "Milan, IT",
-	}
-
-	if err := SyncCommunityProfile(initialData); err != nil {
-		t.Fatalf("SyncCommunityProfile creation failed: %v", err)
-	}
-
-	// Verify token was auto-captured and saved to ~/.ssh/penguins-community.secret (and NOT in community.json/community.yaml)
-	saved := LoadCommunityData()
-	if saved.ArtisanToken != "egg_pat_generated987" {
-		t.Errorf("expected auto-captured token 'egg_pat_generated987', got %q", saved.ArtisanToken)
-	}
-	if saved.ID != "distro-artist" {
-		t.Errorf("expected auto-captured ID 'distro-artist', got %q", saved.ID)
-	}
-
-	secretBytes, err := os.ReadFile(GetCommunitySecretPath())
-	if err != nil {
-		t.Fatalf("expected secret file %s to exist: %v", GetCommunitySecretPath(), err)
-	}
-	if strings.TrimSpace(string(secretBytes)) != "egg_pat_generated987" {
-		t.Errorf("unexpected secret file content: %q", string(secretBytes))
-	}
-	secretInfo, err := os.Stat(GetCommunitySecretPath())
-	if err != nil || secretInfo.Mode().Perm() != 0600 {
-		t.Errorf("expected 0600 permissions on secret file, got %v", secretInfo.Mode().Perm())
-	}
-
-	jsonBytes, _ := os.ReadFile(filepath.Join(tmpDir, "config", "penguins-eggs", "community.json"))
-	if strings.Contains(string(jsonBytes), "egg_pat_") || strings.Contains(string(jsonBytes), "artisan_token") {
-		t.Errorf("community.json must NOT contain the secret token: %s", string(jsonBytes))
-	}
-	yamlBytes, _ := os.ReadFile(filepath.Join(tmpDir, "config", "penguins-eggs", "community.yaml"))
-	if strings.Contains(string(yamlBytes), "egg_pat_") || strings.Contains(string(yamlBytes), "artisan_token") {
-		t.Errorf("community.yaml must NOT contain the secret token: %s", string(yamlBytes))
-	}
-
-	responseJSON = `{"status":"ok","id":"distro-artist"}`
-	saved.Location = "Turin, IT"
-	if err := SyncCommunityProfile(saved); err != nil {
-		t.Fatalf("SyncCommunityProfile update failed: %v", err)
-	}
-
-	if sentTok := lastHeaders.Get("X-Eggs-Artisan-Token"); sentTok != "egg_pat_generated987" {
-		t.Errorf("expected X-Eggs-Artisan-Token header 'egg_pat_generated987', got %q", sentTok)
-	}
-	if authHdr := lastHeaders.Get("Authorization"); authHdr != "Bearer egg_pat_generated987" {
-		t.Errorf("expected Bearer Authorization header, got %q", authHdr)
-	}
-
-	saved.Enabled = false
-	if err := SyncCommunityProfile(saved); err != nil {
-		t.Fatalf("SyncCommunityProfile delete failed: %v", err)
-	}
-	if sentTok := lastHeaders.Get("X-Eggs-Artisan-Token"); sentTok != "egg_pat_generated987" {
-		t.Errorf("expected X-Eggs-Artisan-Token header on DELETE, got %q", sentTok)
-	}
-}
-
-func TestFetchProfileWithToken(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
-
-	var lastToken string
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		lastToken = r.Header.Get("X-Eggs-Artisan-Token")
-		if lastToken != "egg_pat_valid_token_123" {
-			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{
-			"id": "linux-artisan",
-			"uuid": "linux-artisan",
-			"nickname": "LinuxArtisan",
-			"location": "Bologna, IT",
-			"source_url": "https://github.com/artisan/distro",
-			"bio": "Crafting Linux distros with Eggs",
-			"socials": {
-				"github": "artisan",
-				"telegram": "@artisan"
-			},
-			"enabled": true
-		}`))
-	}))
-	defer srv.Close()
-
-	t.Setenv("EGGS_COMMUNITY_ENDPOINT", srv.URL+"/api/community")
-
-	errBad := FetchProfileWithToken("egg_pat_bad_token")
-	if errBad == nil {
-		t.Fatalf("expected error with bad token, got nil")
-	}
-
-	errValid := FetchProfileWithToken("egg_pat_valid_token_123")
-	if errValid != nil {
-		t.Fatalf("FetchProfileWithToken failed: %v", errValid)
-	}
-
-	loaded := LoadCommunityData()
-	if !loaded.Enabled {
-		t.Errorf("expected loaded.Enabled == true")
-	}
-	if loaded.ArtisanToken != "egg_pat_valid_token_123" {
-		t.Errorf("expected ArtisanToken 'egg_pat_valid_token_123', got %q", loaded.ArtisanToken)
-	}
-	if loaded.ID != "linux-artisan" {
-		t.Errorf("expected ID 'linux-artisan', got %q", loaded.ID)
-	}
-	if loaded.Nickname != "LinuxArtisan" {
-		t.Errorf("expected Nickname 'LinuxArtisan', got %q", loaded.Nickname)
-	}
-	if loaded.Location != "Bologna, IT" {
-		t.Errorf("expected Location 'Bologna, IT', got %q", loaded.Location)
-	}
-	if loaded.Socials.GitHub != "artisan" {
-		t.Errorf("expected GitHub 'artisan', got %q", loaded.Socials.GitHub)
 	}
 }

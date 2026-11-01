@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -68,7 +67,6 @@ type App struct {
 	result           *widget.Label
 	openFolder       *widget.Button
 	howToBoot        *widget.Button
-	communityBtn     *widget.Button
 	mainTabs         *container.AppTabs
 	getCommunityData func() community.CommunityData
 
@@ -89,6 +87,7 @@ type App struct {
 
 // Run initializes and starts the Penguins GUI desktop application.
 func Run(iconSVG []byte) {
+	system.SetupUserEnvironment()
 	a := app.NewWithID(ApplicationID)
 	appIcon := fyne.NewStaticResource("penguins-gui.svg", iconSVG)
 	a.SetIcon(appIcon)
@@ -142,11 +141,9 @@ func Run(iconSVG []byte) {
 	w.SetCloseIntercept(ui.quit)
 
 	remasterContent := ui.buildRemasterTab()
-	communityPanel, getCommunityData := buildCommunityPanel(w, ui.updateCommunityStatus)
+	communityPanel, getCommunityData := buildCommunityPanel(w, nil)
 	ui.getCommunityData = getCommunityData
 	communityTabContent := container.NewPadded(communityPanel)
-
-	ui.updateCommunityStatus(ui.getCommunityData())
 
 	ui.mainTabs = container.NewAppTabs(
 		container.NewTabItemWithIcon("Remaster", theme.DocumentCreateIcon(), remasterContent),
@@ -176,6 +173,7 @@ func Run(iconSVG []byte) {
 		)
 	}
 	w.ShowAndRun()
+	_ = system.FixPathOwnership(filepath.Join(system.GetUserConfigDir(), "fyne"))
 }
 
 func (ui *App) setExplanation(text string) {
@@ -372,21 +370,14 @@ func (ui *App) createISO() {
 		if ui.getCommunityData != nil {
 			comm := ui.getCommunityData()
 			if comm.Enabled {
-				nick := comm.Nickname
-				if nick == "" {
-					nick = "Anonymous"
+				id := comm.AuthorID
+				if len(id) > 16 {
+					id = id[:16] + "..."
 				}
-				var details []string
-				if comm.Contact != "" {
-					details = append(details, comm.Contact)
-				}
-				if comm.SourceURL != "" {
-					details = append(details, "source: "+comm.SourceURL)
-				}
-				if len(details) > 0 {
-					ui.logView.Append(fmt.Sprintf("[community] Community participation active (@%s, %s - %s)\n\n", nick, comm.Location, strings.Join(details, " - ")))
+				if comm.Email != "" {
+					ui.logView.Append(fmt.Sprintf("[community] Community participation active (%s, author_id: %s)\n\n", comm.Email, id))
 				} else {
-					ui.logView.Append(fmt.Sprintf("[community] Community participation active (@%s, %s)\n\n", nick, comm.Location))
+					ui.logView.Append(fmt.Sprintf("[community] Community participation active (author_id: %s)\n\n", id))
 				}
 			} else {
 				ui.logView.Append("[community] Community participation: disabled\n\n")
@@ -427,10 +418,10 @@ func (ui *App) createISO() {
 						comm := ui.getCommunityData()
 						if comm.Enabled {
 							go func() {
-								if syncErr := community.SyncCommunityProfile(comm); syncErr != nil {
-									ui.logView.Append(fmt.Sprintf("[community] Warning: failed to sync profile to community server: %v\n", syncErr))
+								if _, syncErr := community.SyncCommunityProfile(comm); syncErr != nil {
+									ui.logView.Append(fmt.Sprintf("[community] Warning: failed to sync machine to community server: %v\n", syncErr))
 								} else {
-									ui.logView.Append(fmt.Sprintf("[community] Profile successfully published to %s\n", community.Endpoint()))
+									ui.logView.Append(fmt.Sprintf("[community] Machine status confirmed on %s\n", community.Endpoint()))
 								}
 							}()
 						}

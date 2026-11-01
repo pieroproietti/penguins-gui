@@ -293,3 +293,22 @@ func TestToolbarAndTopBarPlacement(t *testing.T) {
 		t.Errorf("expected top bar actions to be aligned at Y=0, got %v", rightBox.Position().Y)
 	}
 }
+
+func TestShowGeneratedTokenDialog(t *testing.T) {
+	// Must not panic on nil parent
+	showGeneratedTokenDialog(nil, "egg_pat_test123")
+
+	a := test.NewApp()
+	defer test.NewApp()
+	w := test.NewWindow(nil)
+	defer w.Close()
+
+	testToken := "egg_pat_abcdef1234567890"
+	showGeneratedTokenDialog(w, testToken)
+
+	clip := a.Clipboard().Content()
+	if clip != testToken {
+		t.Errorf("expected clipboard to have %q, got %q", testToken, clip)
+	}
+	_ = a
+}

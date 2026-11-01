@@ -1,43 +1,58 @@
-// Package community manages community participation profiles, validation, local storage,
+/*
+ * penguins-gui - Copyright (C) 2026-2026 Piero Proietti
+ * Author: Piero Proietti <piero.proietti@gmail.com>
+ * https://penguins-eggs.net
+ *
+ * This file is part of penguins-gui.
+ * Released under the GNU GPL v3 license.
+ */
+
+// Package community manages artisan identity (via email hash and Gravatar),
 // machine UUID derivation, and synchronization with the community API.
 package community
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"os"
 	"strings"
 )
 
 const (
-	MaxBioLength              = 200
 	DefaultCommunityEndpoint  = "https://api.penguins-eggs.net/api/community"
 	FallbackCommunityEndpoint = "https://penguins-eggs.net/api/community"
 )
 
-// CommunitySocials holds individual social platform handles in alphabetical order.
-type CommunitySocials struct {
-	Facebook string `yaml:"facebook,omitempty" json:"facebook,omitempty"`
-	Gitee    string `yaml:"gitee,omitempty" json:"gitee,omitempty"`
-	GitHub   string `yaml:"github,omitempty" json:"github,omitempty"`
-	Telegram string `yaml:"telegram,omitempty" json:"telegram,omitempty"`
-	WeChat   string `yaml:"wechat,omitempty" json:"wechat,omitempty"`
-	WhatsApp string `yaml:"whatsapp,omitempty" json:"whatsapp,omitempty"`
-	X        string `yaml:"x,omitempty" json:"x,omitempty"`
+// CommunityData represents local state for community participation.
+// Note: ArtisanToken (egg-pat) is managed strictly in memory and is NEVER saved to disk.
+type CommunityData struct {
+	AuthorID     string `yaml:"author_id,omitempty" json:"author_id,omitempty"`
+	Email        string `yaml:"email,omitempty" json:"email,omitempty"`
+	Enabled      bool   `yaml:"enabled" json:"enabled"`
+	ArtisanToken string `yaml:"-" json:"-"` // in-memory only
 }
 
-// CommunityData represents user preferences for community participation.
-// Email is strictly forbidden to prevent spam.
-// The secret Community Token is stored separately in ~/.ssh/penguins-community.secret
-// and is never serialized into community.json or community.yaml.
-type CommunityData struct {
-	ID           string           `yaml:"id,omitempty" json:"id,omitempty"`
-	ArtisanToken string           `yaml:"-" json:"-"`
-	Enabled      bool             `yaml:"enabled" json:"enabled"`
-	Nickname     string           `yaml:"nickname,omitempty" json:"nickname,omitempty"`
-	Location     string           `yaml:"location,omitempty" json:"location,omitempty"`
-	SourceURL    string           `yaml:"source_url,omitempty" json:"source_url,omitempty"` // repository or project website
-	Bio          string           `yaml:"bio,omitempty" json:"bio,omitempty"`               // max 200 characters
-	Contact      string           `yaml:"contact,omitempty" json:"contact,omitempty"`       // primary public contact handle/URL (never email!)
-	Socials      CommunitySocials `yaml:"socials,omitempty" json:"socials,omitempty"`
+// ComputeAuthorID normalizes the email (lowercase and trimmed) and returns its hexadecimal SHA-256 hash.
+func ComputeAuthorID(email string) string {
+	cleaned := strings.ToLower(strings.TrimSpace(email))
+	if cleaned == "" {
+		return ""
+	}
+	hash := sha256.Sum256([]byte(cleaned))
+	return hex.EncodeToString(hash[:])
+}
+
+// GravatarURL returns the Gravatar avatar URL for the given email with fallback identicon.
+func GravatarURL(email string, size int) string {
+	hash := ComputeAuthorID(email)
+	if hash == "" {
+		hash = "0000000000000000000000000000000000000000000000000000000000000000"
+	}
+	if size <= 0 {
+		size = 96
+	}
+	return fmt.Sprintf("https://www.gravatar.com/avatar/%s?s=%d&d=identicon", hash, size)
 }
 
 // Endpoint returns the active community API endpoint URL.

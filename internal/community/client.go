@@ -1,3 +1,12 @@
+/*
+ * penguins-gui - Copyright (C) 2026-2026 Piero Proietti
+ * Author: Piero Proietti <piero.proietti@gmail.com>
+ * https://penguins-eggs.net
+ *
+ * This file is part of penguins-gui.
+ * Released under the GNU GPL v3 license.
+ */
+
 package community
 
 import (
@@ -9,6 +18,12 @@ import (
 	"net/http"
 	"strings"
 	"time"
+)
+
+var (
+	ErrUnauthorizedEmail = errors.New("this email is already registered. Please paste your valid egg-pat token to associate this machine")
+	ErrTokenRequired     = errors.New("your egg-pat token is required to deactivate and remove this machine from the server")
+	ErrMissingEmail      = errors.New("please enter a valid email address")
 )
 
 func doCommunityRequest(method, pathSuffix, token string, payload []byte) (*http.Response, error) {
@@ -51,208 +66,122 @@ func doCommunityRequest(method, pathSuffix, token string, payload []byte) (*http
 	return resp, err
 }
 
-// SyncCommunityProfile communicates directly with /api/community:
-// If data.Enabled is true, it sends a PUT request to https://api.penguins-eggs.net/api/community/{id-or-uuid}.
-// If data.Enabled is false, it sends a DELETE request to https://api.penguins-eggs.net/api/community/{id-or-uuid}.
-// Fail-safe: uses a short 7s timeout and falls back to FallbackCommunityEndpoint if the primary host fails.
-// Injects X-Eggs-Artisan-Token when available and captures auto-issued tokens on first creation (TOFU).
-func SyncCommunityProfile(data CommunityData) error {
+// SyncCommunityProfile communicates with /api/community:
+//
+// Case A (First run / TOFU, empty token):
+//   Sends PUT with author_id and uuid without auth headers.
+//   If author_id is newly created, server returns artisan_token which is returned to caller.
+//
+// Case B (Existing author, token provided):
+//   Sends PUT with author_id, uuid, and auth headers (X-Eggs-Artisan-Token / Authorization).
+//   If 401 Unauthorized, returns ErrUnauthorizedEmail.
+//
+// Case C (Deactivation):
+//   Sends DELETE with author_id and uuid. Requires token (ErrTokenRequired if empty).
+func SyncCommunityProfile(data CommunityData) (string, error) {
 	uuid := GetMachineUUID()
 	if uuid == "" {
-		return errors.New("unable to determine machine UUID")
+		return "", errors.New("unable to determine machine UUID")
+	}
+
+	authorID := strings.TrimSpace(data.AuthorID)
+	email := strings.TrimSpace(strings.ToLower(data.Email))
+	if authorID == "" {
+		if email != "" {
+			authorID = ComputeAuthorID(email)
+		}
+	}
+
+	if authorID == "" {
+		return "", ErrMissingEmail
 	}
 
 	tok := strings.TrimSpace(data.ArtisanToken)
-	if tok == "" {
-		if loaded := LoadCommunityData(); loaded.ArtisanToken != "" {
-			tok = strings.TrimSpace(loaded.ArtisanToken)
-			data.ArtisanToken = tok
-		}
-	}
-
-	targetID := strings.TrimSpace(data.ID)
-	if targetID == "" {
-		targetID = uuid
-	}
 
 	if !data.Enabled {
-		resp, err := doCommunityRequest(http.MethodDelete, targetID, tok, nil)
+		if tok == "" {
+			return "", ErrTokenRequired
+		}
+		delPayload, _ := json.Marshal(map[string]interface{}{
+			"author_id": authorID,
+			"uuid":      uuid,
+			"enabled":   false,
+		})
+		resp, err := doCommunityRequest(http.MethodDelete, authorID, tok, delPayload)
 		if err != nil {
-			return fmt.Errorf("network error removing profile: %w", err)
+			return "", fmt.Errorf("network error during removal: %w", err)
 		}
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-			body, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("server error (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
-		}
-		return nil
-	}
 
-	socials := make(map[string]string)
-	for _, item := range []struct {
-		key string
-		val string
-	}{
-		{"facebook", data.Socials.Facebook},
-		{"gitee", data.Socials.Gitee},
-		{"github", data.Socials.GitHub},
-		{"telegram", data.Socials.Telegram},
-		{"wechat", data.Socials.WeChat},
-		{"whatsapp", data.Socials.WhatsApp},
-		{"x", data.Socials.X},
-	} {
-		if s := CleanPlatformHandle(item.key, item.val); s != "" {
-			socials[item.key] = s
+		if resp.StatusCode == http.StatusUnauthorized {
+			return "", errors.New("invalid egg-pat token. Unable to remove machine")
 		}
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+			body, _ := io.ReadAll(resp.Body)
+			return "", fmt.Errorf("server error (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		}
+		return "", nil
 	}
 
 	payloadMap := map[string]interface{}{
-		"uuid":       uuid,
-		"nickname":   strings.TrimSpace(data.Nickname),
-		"location":   strings.TrimSpace(data.Location),
-		"source_url": CleanSourceURL(data.SourceURL),
-		"bio":        strings.TrimSpace(data.Bio),
-		"contact":    data.Contact,
-		"socials":    socials,
-		"enabled":    true,
-	}
-	if data.ID != "" {
-		payloadMap["id"] = strings.TrimSpace(data.ID)
-	}
-	if tok != "" {
-		payloadMap["token"] = tok
+		"author_id": authorID,
+		"uuid":      uuid,
+		"email":     email,
+		"enabled":   true,
 	}
 
 	payloadBytes, err := json.Marshal(payloadMap)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	resp, err := doCommunityRequest(http.MethodPut, targetID, tok, payloadBytes)
+	resp, err := doCommunityRequest(http.MethodPut, authorID, tok, payloadBytes)
 	if err != nil {
-		return fmt.Errorf("network error updating profile: %w", err)
+		return "", fmt.Errorf("network error during update: %w", err)
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusUnauthorized {
+		return "", ErrUnauthorizedEmail
+	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("server error (%d): %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+		return "", fmt.Errorf("server error (%d): %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
 	}
 
-	// Trust-On-First-Use: Extract artisan_token or id if returned
 	var respData map[string]interface{}
+	newTok := ""
 	if err := json.Unmarshal(bodyBytes, &respData); err == nil {
-		shouldSave := false
-		if returnedTok, ok := respData["artisan_token"].(string); ok && strings.TrimSpace(returnedTok) != "" {
-			trimmedTok := strings.TrimSpace(returnedTok)
-			if data.ArtisanToken != trimmedTok {
-				data.ArtisanToken = trimmedTok
-				shouldSave = true
-			}
-		}
-		if returnedID, ok := respData["id"].(string); ok && strings.TrimSpace(returnedID) != "" {
-			trimmedID := strings.TrimSpace(returnedID)
-			if data.ID != trimmedID {
-				data.ID = trimmedID
-				shouldSave = true
-			}
-		}
-		if shouldSave {
-			_ = SaveCommunityData(data)
+		if t, ok := respData["artisan_token"].(string); ok && strings.TrimSpace(t) != "" {
+			newTok = strings.TrimSpace(t)
+		} else if t, ok := respData["token"].(string); ok && strings.TrimSpace(t) != "" {
+			newTok = strings.TrimSpace(t)
+		} else if t, ok := respData["egg_pat"].(string); ok && strings.TrimSpace(t) != "" {
+			newTok = strings.TrimSpace(t)
 		}
 	}
 
-	return nil
+	return newTok, nil
 }
 
-// FetchProfileWithToken retrieves the community profile for the given token from /api/community/me
-// and persists it into the local community.json / community.yaml configurations.
-func FetchProfileWithToken(token string) error {
-	_, err := FetchProfileWithTokenData(token)
-	return err
-}
-
-// FetchProfileWithTokenData fetches the profile with token and returns the populated CommunityData.
-func FetchProfileWithTokenData(token string) (*CommunityData, error) {
-	trimmedToken := strings.TrimSpace(token)
-	if trimmedToken == "" {
-		return nil, errors.New("artisan token cannot be empty")
+// FetchGravatarImage downloads the raw avatar image bytes from Gravatar.
+func FetchGravatarImage(email string, size int) ([]byte, error) {
+	u := GravatarURL(email, size)
+	client := &http.Client{
+		Timeout: 5 * time.Second,
 	}
-
-	resp, err := doCommunityRequest(http.MethodGet, "me", trimmedToken, nil)
+	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
-		return nil, fmt.Errorf("network error fetching profile: %w", err)
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "penguins-gui/1.0")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
 	}
 	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read server response: %w", err)
-	}
-
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server error (%d): %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+		return nil, fmt.Errorf("gravatar returned status %d", resp.StatusCode)
 	}
-
-	var p struct {
-		ID        string            `json:"id"`
-		UUID      string            `json:"uuid"`
-		Nickname  string            `json:"nickname"`
-		Location  string            `json:"location"`
-		Bio       string            `json:"bio"`
-		Contact   string            `json:"contact"`
-		Socials   map[string]string `json:"socials"`
-		SourceURL string            `json:"source_url"`
-		Enabled   *bool             `json:"enabled"`
-	}
-	if err := json.Unmarshal(bodyBytes, &p); err != nil {
-		return nil, fmt.Errorf("failed to parse profile JSON: %w", err)
-	}
-
-	enabled := true
-	if p.Enabled != nil {
-		enabled = *p.Enabled
-	}
-
-	socials := CommunitySocials{}
-	if p.Socials != nil {
-		socials.Facebook = CleanPlatformHandle("facebook", p.Socials["facebook"])
-		socials.Gitee = CleanPlatformHandle("gitee", p.Socials["gitee"])
-		socials.GitHub = CleanPlatformHandle("github", p.Socials["github"])
-		socials.Telegram = CleanPlatformHandle("telegram", p.Socials["telegram"])
-		socials.WeChat = CleanPlatformHandle("wechat", p.Socials["wechat"])
-		socials.WhatsApp = CleanPlatformHandle("whatsapp", p.Socials["whatsapp"])
-		socials.X = CleanPlatformHandle("x", p.Socials["x"])
-		if socials.X == "" {
-			socials.X = CleanPlatformHandle("x", p.Socials["twitter"])
-		}
-	}
-
-	contact := p.Contact
-	if contact == "" {
-		contact = ComputePrimaryContact(socials)
-	}
-
-	id := strings.TrimSpace(p.ID)
-	if id == "" {
-		id = strings.TrimSpace(p.UUID)
-	}
-
-	data := CommunityData{
-		ID:           id,
-		ArtisanToken: trimmedToken,
-		Enabled:      enabled,
-		Nickname:     strings.TrimSpace(p.Nickname),
-		Location:     strings.TrimSpace(p.Location),
-		SourceURL:    CleanSourceURL(p.SourceURL),
-		Bio:          strings.TrimSpace(p.Bio),
-		Contact:      contact,
-		Socials:      socials,
-	}
-
-	if err := SaveCommunityData(data); err != nil {
-		return nil, fmt.Errorf("failed to save imported community data: %w", err)
-	}
-
-	return &data, nil
+	return io.ReadAll(resp.Body)
 }

@@ -22,6 +22,8 @@ import (
 var iconSVG []byte
 
 func main() {
+	system.SetupUserEnvironment()
+
 	if len(os.Args) > 1 && os.Args[1] == system.GRUBHelperArg {
 		if len(os.Args) != 4 {
 			fmt.Fprintln(os.Stderr, "Expected Eggs executable and ISO path")

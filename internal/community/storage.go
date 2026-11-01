@@ -1,3 +1,12 @@
+/*
+ * penguins-gui - Copyright (C) 2026-2026 Piero Proietti
+ * Author: Piero Proietti <piero.proietti@gmail.com>
+ * https://penguins-eggs.net
+ *
+ * This file is part of penguins-gui.
+ * Released under the GNU GPL v3 license.
+ */
+
 package community
 
 import (
@@ -6,24 +15,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pieroproietti/penguins-gui/internal/system"
 	"gopkg.in/yaml.v3"
 )
 
-const CommunitySecretFileName = "penguins-community.secret"
-
 // getEggsConfigDir returns the user configuration directory for penguins-eggs.
+// When running with sudo or root privileges, it resolves to SUDO_USER's config directory.
 func getEggsConfigDir() (string, error) {
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "penguins-eggs"), nil
-	}
-	cfgDir, err := os.UserConfigDir()
-	if err != nil {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(home, ".config", "penguins-eggs"), nil
-	}
+	cfgDir := system.GetUserConfigDir()
 	return filepath.Join(cfgDir, "penguins-eggs"), nil
 }
 
@@ -36,48 +35,9 @@ func getEggsConfigPath() string {
 	return filepath.Join(dir, "community.json")
 }
 
-// GetCommunitySecretPath returns the path to ~/.ssh/penguins-community.secret.
-func GetCommunitySecretPath() string {
-	if custom := strings.TrimSpace(os.Getenv("EGGS_COMMUNITY_SECRET_PATH")); custom != "" {
-		return custom
-	}
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		// In isolated test environments using XDG_CONFIG_HOME, place .ssh sibling to config dir
-		return filepath.Join(filepath.Dir(xdg), ".ssh", CommunitySecretFileName)
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join("/root", ".ssh", CommunitySecretFileName)
-	}
-	return filepath.Join(home, ".ssh", CommunitySecretFileName)
-}
-
-func loadCommunitySecret() string {
-	data, err := os.ReadFile(GetCommunitySecretPath())
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
-}
-
-func saveCommunitySecret(token string) error {
-	secretPath := GetCommunitySecretPath()
-	trimmed := strings.TrimSpace(token)
-	if trimmed == "" {
-		return nil
-	}
-	sshDir := filepath.Dir(secretPath)
-	if err := os.MkdirAll(sshDir, 0700); err != nil {
-		return err
-	}
-	return os.WriteFile(secretPath, []byte(trimmed+"\n"), 0600)
-}
-
-// LoadCommunityData loads community preferences from community.json or community.yaml,
-// and loads the private Community Token from ~/.ssh/penguins-community.secret.
+// LoadCommunityData loads community preferences from community.json or community.yaml.
+// Note: ArtisanToken (egg-pat) is managed strictly in memory and is NEVER read from disk.
 func LoadCommunityData() CommunityData {
-	secretToken := loadCommunitySecret()
-
 	userPath := getEggsConfigPath()
 	candidates := []string{
 		userPath,
@@ -116,88 +76,27 @@ func LoadCommunityData() CommunityData {
 
 		var comm CommunityData
 		if err := json.Unmarshal(commBytes, &comm); err == nil {
-			// Migrate legacy artisan_token from config file into ~/.ssh/penguins-community.secret
-			var legacyTok string
-			if commMap != nil {
-				if rawTok, ok := commMap["artisan_token"].(string); ok {
-					legacyTok = strings.TrimSpace(rawTok)
+			// Backward compatibility: if author_id is missing but id is present
+			if comm.AuthorID == "" {
+				if id, ok := commMap["id"].(string); ok && id != "" {
+					comm.AuthorID = strings.TrimSpace(id)
 				}
 			}
-			if secretToken != "" {
-				comm.ArtisanToken = secretToken
-			} else if legacyTok != "" {
-				comm.ArtisanToken = legacyTok
-				_ = saveCommunitySecret(legacyTok)
+			if comm.AuthorID == "" && comm.Email != "" {
+				comm.AuthorID = ComputeAuthorID(comm.Email)
 			}
-
-			// Backward compatibility: map legacy contact/bio fields if socials are missing
-			if comm.Socials.Telegram == "" && (strings.HasPrefix(comm.Contact, "@") || strings.Contains(comm.Contact, "t.me/")) {
-				comm.Socials.Telegram = comm.Contact
-			}
-			if comm.Socials.GitHub == "" {
-				if strings.Contains(comm.Contact, "github.com") {
-					comm.Socials.GitHub = comm.Contact
-				} else if strings.Contains(comm.Bio, "github.com") {
-					comm.Socials.GitHub = comm.Bio
-				}
-			}
-			if comm.Socials.Gitee == "" && strings.Contains(comm.Contact, "gitee.com") {
-				comm.Socials.Gitee = comm.Contact
-			}
-
-			// Clean all handles
-			if comm.Socials.Facebook != "" {
-				comm.Socials.Facebook = CleanPlatformHandle("facebook", comm.Socials.Facebook)
-			}
-			if comm.Socials.Gitee != "" {
-				comm.Socials.Gitee = CleanPlatformHandle("gitee", comm.Socials.Gitee)
-			}
-			if comm.Socials.GitHub != "" {
-				comm.Socials.GitHub = CleanPlatformHandle("github", comm.Socials.GitHub)
-			}
-			if comm.Socials.Telegram != "" {
-				comm.Socials.Telegram = CleanPlatformHandle("telegram", comm.Socials.Telegram)
-			}
-			if comm.Socials.WeChat != "" {
-				comm.Socials.WeChat = CleanPlatformHandle("wechat", comm.Socials.WeChat)
-			}
-			if comm.Socials.WhatsApp != "" {
-				comm.Socials.WhatsApp = CleanPlatformHandle("whatsapp", comm.Socials.WhatsApp)
-			}
-			if comm.Socials.X != "" {
-				comm.Socials.X = CleanPlatformHandle("x", comm.Socials.X)
-			}
-
-			// Clean source URL and bio
-			comm.SourceURL = strings.TrimSpace(comm.SourceURL)
-			if comm.SourceURL != "" {
-				comm.SourceURL = CleanSourceURL(comm.SourceURL)
-			}
-			comm.Bio = strings.TrimSpace(comm.Bio)
-			if len([]rune(comm.Bio)) > MaxBioLength {
-				comm.Bio = string([]rune(comm.Bio)[:MaxBioLength])
-			}
-
-			// Compute canonical primary contact without platform favoritism
-			comm.Contact = ComputePrimaryContact(comm.Socials)
-
-			// If legacy token was present in the public config file, rewrite config without it
-			if legacyTok != "" {
-				_ = SaveCommunityData(comm)
-			}
-
+			comm.ArtisanToken = "" // strictly in-memory
 			return comm
 		}
 	}
 
 	return CommunityData{
-		ArtisanToken: secretToken,
-		Enabled:      false,
+		Enabled: false,
 	}
 }
 
-// SaveCommunityData persists public community preferences into community.json and community.yaml,
-// while storing the secret Community Token exclusively in ~/.ssh/penguins-community.secret (0600).
+// SaveCommunityData persists community preferences into community.json and community.yaml.
+// The private egg-pat token is NEVER saved to disk.
 func SaveCommunityData(data CommunityData) error {
 	path := getEggsConfigPath()
 	dir := filepath.Dir(path)
@@ -205,67 +104,28 @@ func SaveCommunityData(data CommunityData) error {
 		return err
 	}
 
-	if err := saveCommunitySecret(data.ArtisanToken); err != nil {
-		return err
-	}
-
-	socials := CommunitySocials{}
-	if s := CleanPlatformHandle("facebook", data.Socials.Facebook); s != "" {
-		socials.Facebook = s
-	}
-	if s := CleanPlatformHandle("gitee", data.Socials.Gitee); s != "" {
-		socials.Gitee = s
-	}
-	if s := CleanPlatformHandle("github", data.Socials.GitHub); s != "" {
-		socials.GitHub = s
-	}
-	if s := CleanPlatformHandle("telegram", data.Socials.Telegram); s != "" {
-		socials.Telegram = s
-	}
-	if s := CleanPlatformHandle("wechat", data.Socials.WeChat); s != "" {
-		socials.WeChat = s
-	}
-	if s := CleanPlatformHandle("whatsapp", data.Socials.WhatsApp); s != "" {
-		socials.WhatsApp = s
-	}
-	if s := CleanPlatformHandle("x", data.Socials.X); s != "" {
-		socials.X = s
-	}
-
-	cleanSource := ""
-	if data.SourceURL != "" {
-		cleanSource = CleanSourceURL(data.SourceURL)
-	}
-
-	cleanBio := strings.TrimSpace(data.Bio)
-	if len([]rune(cleanBio)) > MaxBioLength {
-		cleanBio = string([]rune(cleanBio)[:MaxBioLength])
+	authorID := strings.TrimSpace(data.AuthorID)
+	email := strings.TrimSpace(strings.ToLower(data.Email))
+	if authorID == "" && email != "" {
+		authorID = ComputeAuthorID(email)
 	}
 
 	toSave := CommunityData{
-		ID:        strings.TrimSpace(data.ID),
-		Enabled:   data.Enabled,
-		Nickname:  strings.TrimSpace(data.Nickname),
-		Location:  strings.TrimSpace(data.Location),
-		SourceURL: cleanSource,
-		Bio:       cleanBio,
-		Contact:   ComputePrimaryContact(socials),
-		Socials:   socials,
+		AuthorID: authorID,
+		Email:    email,
+		Enabled:  data.Enabled,
 	}
 
 	out, err := json.MarshalIndent(toSave, "", "  ")
 	if err != nil {
 		return err
 	}
-	out = append(out, '\n')
-
 	if err := os.WriteFile(path, out, 0644); err != nil {
 		return err
 	}
 
-	// Also persist community settings into community.yaml in user configuration directory (without email or token)
 	saveToCommunityYAML(filepath.Join(dir, "community.yaml"), toSave)
-
+	_ = system.FixPathOwnership(dir)
 	return nil
 }
 
@@ -278,14 +138,7 @@ func saveToCommunityYAML(communityYamlPath string, data CommunityData) {
 		root = make(map[string]interface{})
 	}
 
-	if data.Enabled {
-		root["community"] = data
-	} else {
-		root["community"] = map[string]interface{}{
-			"enabled": false,
-		}
-	}
-
+	root["community"] = data
 	if yamlBytes, err := yaml.Marshal(root); err == nil {
 		_ = os.WriteFile(communityYamlPath, yamlBytes, 0644)
 	}

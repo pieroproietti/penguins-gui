@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"path/filepath"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/pieroproietti/penguins-gui/internal/system"
 )
 
 func (ui *App) setupMenusAndShortcuts() {
@@ -95,6 +98,7 @@ func (ui *App) setupMenusAndShortcuts() {
 		}
 		ui.currentScale = newScale
 		ui.fyneApp.Preferences().SetFloat(preferenceFontScale, float64(newScale))
+		_ = system.FixPathOwnership(filepath.Join(system.GetUserConfigDir(), "fyne"))
 		ui.fyneApp.Settings().SetTheme(newScaledTheme(theme.DefaultTheme(), newScale))
 
 		for i, preset := range scalePresets {

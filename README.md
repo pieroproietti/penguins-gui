@@ -26,6 +26,7 @@ internals and does not modify Penguins' Eggs.
 - Run maintenance commands from menus and the action toolbar.
 - Configure the native Penguins' Eggs repository during tools installation, without requiring Eggs.
 - Automatically install Penguins' Eggs and Penguins Chef after adding its repository and enable remaster actions without restarting.
+- Participate in the Penguins' Eggs Community: link machines to an artisan workshop using Gravatar/SHA-256 identity and secure in-memory `egg-pat` authorization.
 - Adjust font zoom and retain the preference between sessions.
 - Prevent closing the GUI while an operation is running.
 
@@ -82,6 +83,26 @@ their output into the GUI log. Installation stops on the first error; packages
 already installed remain installed, and the action can be retried after fixing
 the cause. Calamares can be installed as needed using Penguins Chef recipes
 (**Edit → Cook…**).
+
+## Community participation
+
+The dedicated **Community** tab allows artisans to connect their local machine to
+the global Penguins' Eggs Community network (`api.penguins-eggs.net`):
+
+- **Identity & Privacy**: Identity is derived from the SHA-256 hash of the artisan's
+  email address (compatible with Gravatar for live avatar previews). The primary identifier
+  exchanged with the community API is the author ID hash rather than plain email.
+- **In-Memory Token (`egg-pat`) Security**:
+  - On the first connection, the community API generates a personal access token (`egg-pat`)
+    under Trust-On-First-Use (TOFU).
+  - The token is held **exclusively in volatile memory** while the application is open and is
+    never saved to disk (not written to `community.json`, `community.yaml`, or SSH directories).
+  - A convenient modal dialog allows copying the token to your password manager so it can be
+    reused on other machines or used to remove the machine later.
+- **Remaster Synchronization**: When enabled, the GUI logs community participation status
+  when creating an ISO and automatically confirms machine status with the server upon completion.
+- **Machine Removal**: Disconnecting and unregistering a machine from the server requires
+  providing the `egg-pat` token to authenticate the removal request.
 
 ## Run during development
 

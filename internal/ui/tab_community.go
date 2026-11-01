@@ -10,537 +10,385 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/pieroproietti/penguins-gui/internal/community"
 )
 
-type socialField struct {
-	key         string
-	label       string
-	placeholder string
-	field       func(*community.CommunitySocials) *string
-	check       *widget.Check
-	entry       *widget.Entry
-}
-
-// buildCommunityPanel creates the UI container for the Community configuration panel.
+// buildCommunityPanel creates the UI container for the simplified Community configuration panel.
+// Identity is strictly based on email hash (Gravatar compatible) and authorization via egg-pat in memory.
 func buildCommunityPanel(w fyne.Window, onUpdate func(community.CommunityData)) (fyne.CanvasObject, func() community.CommunityData) {
-	var isEnabled bool
-	var toggleBtn *widget.Button
+	initial := community.LoadCommunityData()
+	isEnabled := initial.Enabled
 
-	tokenEntry := widget.NewPasswordEntry()
-	tokenEntry.SetPlaceHolder("Community Token (egg_pat_...) — saved in ~/.ssh/penguins-community.secret")
+	// Avatar preview
+	avatarImg := canvas.NewImageFromResource(theme.AccountIcon())
+	avatarImg.FillMode = canvas.ImageFillContain
+	avatarImg.SetMinSize(fyne.NewSize(96, 96))
+	avatarBox := container.NewCenter(container.NewGridWrap(fyne.NewSize(96, 96), avatarImg))
 
-	nicknameEntry := widget.NewEntry()
-	nicknameEntry.SetPlaceHolder("e.g. tux_artisan or @nickname")
+	// Email Entry & Author ID
+	emailEntry := widget.NewEntry()
+	emailEntry.SetPlaceHolder("Your email (e.g. artisan@example.com)")
 
-	locationEntry := widget.NewEntry()
-	locationEntry.SetPlaceHolder("e.g. Rome, IT")
+	authorIDLabel := widget.NewLabel("")
+	authorIDLabel.TextStyle = fyne.TextStyle{Italic: true, Monospace: true}
 
-	sourceURLEntry := widget.NewEntry()
-	sourceURLEntry.SetPlaceHolder("e.g. https://github.com/user/distro or https://mydistro.org")
+	// Token Entry & Copy Button (in-memory only)
+	tokenEntry := widget.NewEntry()
+	tokenEntry.SetPlaceHolder("Paste your egg_pat_... token here (leave blank on first run)")
 
-	bioEntry := widget.NewMultiLineEntry()
-	bioEntry.SetPlaceHolder("Short description of your project, distro, or interests (max 200 characters)...")
-	bioEntry.Wrapping = fyne.TextWrapWord
-	bioEntry.SetMinRowsVisible(3)
-
-	bioCounterLabel := widget.NewLabel(fmt.Sprintf("0/%d characters", community.MaxBioLength))
-	bioCounterLabel.TextStyle = fyne.TextStyle{Italic: true}
-
-	socials := []*socialField{
-		{
-			key:         "facebook",
-			label:       "Facebook",
-			placeholder: "e.g. username or facebook.com/username",
-			field:       func(s *community.CommunitySocials) *string { return &s.Facebook },
-		},
-		{
-			key:         "gitee",
-			label:       "Gitee",
-			placeholder: "e.g. username or gitee.com/username",
-			field:       func(s *community.CommunitySocials) *string { return &s.Gitee },
-		},
-		{
-			key:         "github",
-			label:       "GitHub",
-			placeholder: "e.g. username or github.com/username",
-			field:       func(s *community.CommunitySocials) *string { return &s.GitHub },
-		},
-		{
-			key:         "telegram",
-			label:       "Telegram",
-			placeholder: "e.g. @username or t.me/username",
-			field:       func(s *community.CommunitySocials) *string { return &s.Telegram },
-		},
-		{
-			key:         "wechat",
-			label:       "WeChat",
-			placeholder: "e.g. WeChat ID",
-			field:       func(s *community.CommunitySocials) *string { return &s.WeChat },
-		},
-		{
-			key:         "whatsapp",
-			label:       "WhatsApp",
-			placeholder: "e.g. +39 333 1234567 or wa.me/number",
-			field:       func(s *community.CommunitySocials) *string { return &s.WhatsApp },
-		},
-		{
-			key:         "x",
-			label:       "X (Twitter)",
-			placeholder: "e.g. @username or x.com/username",
-			field:       func(s *community.CommunitySocials) *string { return &s.X },
-		},
-	}
-
-	socialFormObjects := make([]fyne.CanvasObject, 0, len(socials)*2)
-	for _, sf := range socials {
-		sf.check = widget.NewCheck(sf.label, nil)
-		sf.entry = widget.NewEntry()
-		sf.entry.SetPlaceHolder(sf.placeholder)
-		socialFormObjects = append(socialFormObjects, sf.check, sf.entry)
-	}
-
-	socialHelp := widget.NewLabel("ℹ️ Optional: enter your public social channels. Email addresses are strictly forbidden; Fediverse handles (@user@instance.social) are allowed.")
-	socialHelp.TextStyle = fyne.TextStyle{Italic: true}
-	socialHelp.Wrapping = fyne.TextWrapWord
-
-	validationError := widget.NewLabel("")
-	validationError.Wrapping = fyne.TextWrapWord
-	validationError.TextStyle = fyne.TextStyle{Bold: true}
-	validationError.Hide()
-
-	var currentID string
-	var suppressEvents bool
-	var syncTimer *time.Timer
-	var syncSeq uint64
-	var updateFieldStates func()
-
-	setEnabledSilent := func(enabled bool) {
-		isEnabled = enabled
-		if toggleBtn != nil {
-			if enabled {
-				toggleBtn.SetText("Join the Penguins Eggs Community: ON")
-				toggleBtn.SetIcon(theme.ConfirmIcon())
-				toggleBtn.Importance = widget.HighImportance
-			} else {
-				toggleBtn.SetText("Join the Penguins Eggs Community: OFF")
-				toggleBtn.SetIcon(theme.AccountIcon())
-				toggleBtn.Importance = widget.MediumImportance
-			}
-			toggleBtn.Refresh()
-		}
-	}
-
-	currentData := func() community.CommunityData {
-		var soc community.CommunitySocials
-		for _, sf := range socials {
-			if sf.check.Checked {
-				*sf.field(&soc) = community.CleanPlatformHandle(sf.key, sf.entry.Text)
-			}
-		}
-
-		return community.CommunityData{
-			ID:           currentID,
-			ArtisanToken: strings.TrimSpace(tokenEntry.Text),
-			Enabled:      isEnabled,
-			Nickname:     strings.TrimSpace(nicknameEntry.Text),
-			Location:     strings.TrimSpace(locationEntry.Text),
-			SourceURL:    community.CleanSourceURL(sourceURLEntry.Text),
-			Bio:          strings.TrimSpace(bioEntry.Text),
-			Contact:      community.ComputePrimaryContact(soc),
-			Socials:      soc,
-		}
-	}
-
-	hasAnyProfileField := func() bool {
-		if strings.TrimSpace(nicknameEntry.Text) != "" ||
-			strings.TrimSpace(locationEntry.Text) != "" ||
-			strings.TrimSpace(sourceURLEntry.Text) != "" ||
-			strings.TrimSpace(bioEntry.Text) != "" {
-			return true
-		}
-		for _, sf := range socials {
-			if sf.check.Checked && strings.TrimSpace(sf.entry.Text) != "" {
-				return true
-			}
-		}
-		return false
-	}
-
-	validateInputs := func() bool {
-		data := currentData()
-		data.Enabled = true
-		if err := community.ValidateCommunityData(data); err != nil {
-			validationError.SetText("⚠️ " + err.Error())
-			validationError.Show()
-			return false
-		}
-		validationError.SetText("")
-		validationError.Hide()
-		return true
-	}
-
-	populateFields := func(d community.CommunityData) {
-		prev := suppressEvents
-		suppressEvents = true
-		defer func() { suppressEvents = prev }()
-
-		currentID = d.ID
-		if d.ArtisanToken != "" {
-			tokenEntry.SetText(d.ArtisanToken)
-		}
-		nicknameEntry.SetText(d.Nickname)
-		locationEntry.SetText(d.Location)
-		sourceURLEntry.SetText(d.SourceURL)
-		bioEntry.SetText(d.Bio)
-		bioCounterLabel.SetText(fmt.Sprintf("%d/%d characters", len([]rune(d.Bio)), community.MaxBioLength))
-
-		for _, sf := range socials {
-			val := *sf.field(&d.Socials)
-			sf.check.SetChecked(val != "")
-			sf.entry.SetText(val)
-		}
-	}
-
-	// When OFF: fields remain populated (visible) but disabled.
-	// When ON: fields are enabled and editable.
-	updateFieldStates = func() {
-		textEntries := []*widget.Entry{nicknameEntry, locationEntry, sourceURLEntry, bioEntry}
-		if !isEnabled {
-			tokenEntry.Disable()
-			for _, e := range textEntries {
-				e.Disable()
-			}
-			for _, sf := range socials {
-				sf.check.Disable()
-				sf.entry.Disable()
-			}
-			validationError.SetText("")
-			validationError.Hide()
-			return
-		}
-
-		tokenEntry.Enable()
-		for _, e := range textEntries {
-			e.Enable()
-		}
-		for _, sf := range socials {
-			sf.check.Enable()
-			if sf.check.Checked {
-				sf.entry.Enable()
-			} else {
-				sf.entry.Disable()
-			}
-		}
-
-		if hasAnyProfileField() {
-			validateInputs()
-		} else {
-			validationError.SetText("")
-			validationError.Hide()
-		}
-	}
-
-	saveAndSyncOnEdit := func() {
-		if suppressEvents || !isEnabled {
-			return
-		}
-
-		valid := true
-		if hasAnyProfileField() {
-			valid = validateInputs()
-		} else {
-			validationError.SetText("")
-			validationError.Hide()
-		}
-
-		data := currentData()
-		_ = community.SaveCommunityData(data)
-		if onUpdate != nil {
-			onUpdate(data)
-		}
-
-		if !valid {
-			if syncTimer != nil {
-				syncTimer.Stop()
-			}
-			return
-		}
-
+	copyBtn := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
 		tok := strings.TrimSpace(tokenEntry.Text)
-		onlyToken := !hasAnyProfileField() && tok != ""
-		if !onlyToken && !hasAnyProfileField() {
-			if syncTimer != nil {
-				syncTimer.Stop()
+		if tok == "" {
+			if w != nil {
+				dialog.ShowInformation("Token", "No token available to copy.", w)
 			}
 			return
 		}
-
-		syncSeq++
-		seq := syncSeq
-		if syncTimer != nil {
-			syncTimer.Stop()
+		if w != nil && w.Clipboard() != nil {
+			w.Clipboard().SetContent(tok)
+			dialog.ShowInformation("Copy", "Token copied to clipboard!", w)
 		}
-		syncTimer = time.AfterFunc(800*time.Millisecond, func() {
-			if onlyToken {
-				imported, err := community.FetchProfileWithTokenData(tok)
-				fyne.Do(func() {
-					if seq != syncSeq || !isEnabled || err != nil {
-						return
-					}
-					imported.Enabled = true
-					_ = community.SaveCommunityData(*imported)
-					populateFields(*imported)
-					updateFieldStates()
-					if onUpdate != nil {
-						onUpdate(*imported)
-					}
-				})
-				return
-			}
+	})
 
-			err := community.SyncCommunityProfile(data)
+	tokenHelp := widget.NewLabel("ℹ️ Leave blank if this is your first time connecting to generate a new token.\n⚠️ The token is held in memory only and never saved to disk: keep it safe.")
+	tokenHelp.Wrapping = fyne.TextWrapWord
+	tokenHelp.TextStyle = fyne.TextStyle{Italic: true}
+
+	// Status and Action Controls
+	statusLabel := widget.NewLabel("")
+	statusLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+	feedbackLabel := widget.NewLabel("")
+	feedbackLabel.Wrapping = fyne.TextWrapWord
+	feedbackLabel.Hide()
+
+	var actionBtn *widget.Button
+
+	updateUIState := func() {
+		if isEnabled {
+			statusLabel.SetText("Status: Machine connected to Community ✅")
+			if actionBtn != nil {
+				actionBtn.SetText("Remove Machine from Server")
+				actionBtn.SetIcon(theme.CancelIcon())
+				actionBtn.Importance = widget.DangerImportance
+			}
+			emailEntry.Disable()
+		} else {
+			statusLabel.SetText("Status: Machine not connected ⚪")
+			if actionBtn != nil {
+				actionBtn.SetText("Connect Machine to Community")
+				actionBtn.SetIcon(theme.ConfirmIcon())
+				actionBtn.Importance = widget.HighImportance
+			}
+			emailEntry.Enable()
+		}
+		if actionBtn != nil {
+			actionBtn.Refresh()
+		}
+	}
+
+	var gravatarTimer *time.Timer
+	updateGravatar := func(email string) {
+		clean := strings.TrimSpace(strings.ToLower(email))
+		if clean == "" {
+			authorIDLabel.SetText("Author ID: unavailable")
+			avatarImg.Resource = theme.AccountIcon()
+			avatarImg.Refresh()
+			return
+		}
+		authID := community.ComputeAuthorID(clean)
+		if len(authID) >= 16 {
+			authorIDLabel.SetText(fmt.Sprintf("Author ID (SHA-256): %s...", authID[:16]))
+		} else {
+			authorIDLabel.SetText(fmt.Sprintf("Author ID: %s", authID))
+		}
+
+		if gravatarTimer != nil {
+			gravatarTimer.Stop()
+		}
+		gravatarTimer = time.AfterFunc(350*time.Millisecond, func() {
+			data, err := community.FetchGravatarImage(clean, 96)
 			fyne.Do(func() {
-				if seq != syncSeq || !isEnabled || err != nil {
-					return
-				}
-				saved := community.LoadCommunityData()
-				if saved.ArtisanToken != "" && saved.ArtisanToken != strings.TrimSpace(tokenEntry.Text) {
-					prev := suppressEvents
-					suppressEvents = true
-					tokenEntry.SetText(saved.ArtisanToken)
-					suppressEvents = prev
-				}
-				if saved.ID != "" {
-					currentID = saved.ID
-				}
-				if onUpdate != nil {
-					onUpdate(saved)
+				if err == nil && len(data) > 0 {
+					avatarImg.Resource = fyne.NewStaticResource("gravatar.png", data)
+					avatarImg.Refresh()
 				}
 			})
 		})
 	}
 
-	onTextChange := func(string) {
-		saveAndSyncOnEdit()
+	emailEntry.OnChanged = func(s string) {
+		feedbackLabel.Hide()
+		updateGravatar(s)
 	}
 
-	for _, sf := range socials {
-		s := sf
-		s.check.OnChanged = func(checked bool) {
-			if checked && isEnabled {
-				s.entry.Enable()
-			} else {
-				s.entry.Disable()
-			}
-			saveAndSyncOnEdit()
-		}
-		s.entry.OnChanged = onTextChange
-	}
-
-	tokenEntry.OnChanged = onTextChange
-	nicknameEntry.OnChanged = onTextChange
-	locationEntry.OnChanged = onTextChange
-	sourceURLEntry.OnChanged = onTextChange
-
-	bioEntry.OnChanged = func(s string) {
-		runes := []rune(s)
-		if len(runes) > community.MaxBioLength {
-			bioEntry.SetText(string(runes[:community.MaxBioLength]))
-			runes = []rune(bioEntry.Text)
-		}
-		bioCounterLabel.SetText(fmt.Sprintf("%d/%d characters", len(runes), community.MaxBioLength))
-		saveAndSyncOnEdit()
-	}
-
-	// Single ON/OFF button drives community participation:
-	// - ON (true):
-	//   * Enables fields for editing.
-	//   * If only Token is present (profile fields empty): imports profile from server via token and populates fields.
-	//   * If profile fields are present: validates, saves locally, and publishes (PUT) profile to Community server.
-	// - OFF (false):
-	//   * Disables fields (keeping their values visible and saved locally) and removes public profile from Community server (DELETE).
-	toggleBtn = widget.NewButtonWithIcon("Join the Penguins Eggs Community: OFF", theme.AccountIcon(), func() {
-		if suppressEvents {
-			return
-		}
-
-		targetState := !isEnabled
+	actionBtn = widget.NewButtonWithIcon("Connect Machine to Community", theme.ConfirmIcon(), func() {
+		feedbackLabel.Hide()
+		email := strings.TrimSpace(strings.ToLower(emailEntry.Text))
 		tok := strings.TrimSpace(tokenEntry.Text)
 
-		if targetState {
-			// Case 1: Only token is filled and profile fields are empty -> Import from server
-			if !hasAnyProfileField() && tok != "" {
-				setEnabledSilent(true)
-				updateFieldStates()
-				toggleBtn.Disable()
-				go func() {
-					imported, err := community.FetchProfileWithTokenData(tok)
-					fyne.Do(func() {
-						toggleBtn.Enable()
-						if err != nil {
-							dialog.ShowError(err, w)
-							return
-						}
-						imported.Enabled = true
-						_ = community.SaveCommunityData(*imported)
-						populateFields(*imported)
-						setEnabledSilent(true)
-						updateFieldStates()
-						if onUpdate != nil {
-							onUpdate(*imported)
-						}
-					})
-				}()
+		if !isEnabled {
+			// Case A (TOFU) or Case B (Existing author with token)
+			if !community.IsValidEmail(email) {
+				feedbackLabel.SetText("⚠️ Please enter a valid email address before proceeding.")
+				feedbackLabel.Show()
 				return
 			}
 
-			// Case 2: Neither profile fields nor token are filled yet -> Enable fields so the user can fill them in
-			if !hasAnyProfileField() && tok == "" {
-				setEnabledSilent(true)
-				updateFieldStates()
-				data := currentData()
-				data.Enabled = true
-				_ = community.SaveCommunityData(data)
-				if onUpdate != nil {
-					onUpdate(data)
-				}
-				return
-			}
+			actionBtn.Disable()
+			statusLabel.SetText("Connecting to server...")
 
-			// Case 3: Profile fields are already filled -> Enable fields, validate, save locally, and publish to server
-			setEnabledSilent(true)
-			updateFieldStates()
-			if !validateInputs() {
-				return
-			}
-
-			data := currentData()
-			data.Enabled = true
-			if err := community.SaveCommunityData(data); err != nil {
-				dialog.ShowError(fmt.Errorf("failed to save local preferences: %w", err), w)
-				return
-			}
-			if onUpdate != nil {
-				onUpdate(data)
-			}
-
-			toggleBtn.Disable()
 			go func() {
-				err := community.SyncCommunityProfile(data)
+				commData := community.CommunityData{
+					AuthorID:     community.ComputeAuthorID(email),
+					Email:        email,
+					ArtisanToken: tok,
+					Enabled:      true,
+				}
+				newTok, err := community.SyncCommunityProfile(commData)
 				fyne.Do(func() {
-					toggleBtn.Enable()
+					actionBtn.Enable()
 					if err != nil {
-						dialog.ShowError(err, w)
+						updateUIState()
+						if errors.Is(err, community.ErrUnauthorizedEmail) {
+							msg := "⚠️ This email is already registered. Please paste your valid egg-pat token to associate this machine."
+							feedbackLabel.SetText(msg)
+							feedbackLabel.Show()
+							if w != nil {
+								dialog.ShowError(errors.New("This email is already registered.\nPlease paste your valid egg-pat token to associate this machine."), w)
+							}
+						} else {
+							feedbackLabel.SetText(fmt.Sprintf("⚠️ Error: %v", err))
+							feedbackLabel.Show()
+							if w != nil {
+								dialog.ShowError(err, w)
+							}
+						}
 						return
 					}
-					saved := community.LoadCommunityData()
-					if saved.ArtisanToken != "" {
-						prev := suppressEvents
-						suppressEvents = true
-						tokenEntry.SetText(saved.ArtisanToken)
-						suppressEvents = prev
-					}
-					currentID = saved.ID
+
+					isEnabled = true
+					commData.Enabled = true
+					_ = community.SaveCommunityData(commData) // Persists author_id, email, enabled (NO TOKEN)
 					if onUpdate != nil {
-						onUpdate(saved)
+						onUpdate(commData)
+					}
+					updateUIState()
+
+					if newTok != "" {
+						tokenEntry.SetText(newTok)
+						showGeneratedTokenDialog(w, newTok)
+					} else {
+						if w != nil {
+							dialog.ShowInformation("Community", "✅ Machine successfully connected to your workshop!", w)
+						}
 					}
 				})
 			}()
-			return
-		}
-
-		// OFF (targetState == false): Disable fields (keeping values visible & saved locally) and remove from community server
-		if syncTimer != nil {
-			syncTimer.Stop()
-		}
-		syncSeq++
-		idToDelete := currentID
-		setEnabledSilent(false)
-		localDraft := currentData()
-		localDraft.Enabled = false
-		_ = community.SaveCommunityData(localDraft)
-		updateFieldStates()
-		toggleBtn.Disable()
-
-		go func() {
-			delData := community.CommunityData{
-				ID:           idToDelete,
-				ArtisanToken: tok,
-				Enabled:      false,
-			}
-			_ = community.SyncCommunityProfile(delData)
-			fyne.Do(func() {
-				toggleBtn.Enable()
-				if onUpdate != nil {
-					onUpdate(localDraft)
+		} else {
+			// Case C: Deactivation / Removal
+			if tok == "" {
+				msg := "⚠️ Your egg-pat token is required in the Community Token field to remove this machine from the server."
+				feedbackLabel.SetText(msg)
+				feedbackLabel.Show()
+				if w != nil {
+					dialog.ShowError(errors.New("Your egg-pat token is required in the Community Token field to remove this machine from the server."), w)
 				}
-			})
-		}()
+				return
+			}
+
+			if w == nil {
+				return
+			}
+
+			confirmDialog := dialog.NewConfirm("Remove Machine",
+				"Are you sure you want to disconnect and remove this machine from your workshop in the Community?",
+				func(confirmed bool) {
+					if !confirmed {
+						return
+					}
+					actionBtn.Disable()
+					statusLabel.SetText("Removing from server...")
+
+					go func() {
+						commData := community.CommunityData{
+							AuthorID:     community.ComputeAuthorID(email),
+							Email:        email,
+							ArtisanToken: tok,
+							Enabled:      false,
+						}
+						_, err := community.SyncCommunityProfile(commData)
+						fyne.Do(func() {
+							actionBtn.Enable()
+							if err != nil {
+								updateUIState()
+								feedbackLabel.SetText(fmt.Sprintf("⚠️ Removal error: %v", err))
+								feedbackLabel.Show()
+								if w != nil {
+									dialog.ShowError(err, w)
+								}
+								return
+							}
+
+							isEnabled = false
+							commData.Enabled = false
+							_ = community.SaveCommunityData(commData)
+							if onUpdate != nil {
+								onUpdate(commData)
+							}
+							updateUIState()
+							if w != nil {
+								dialog.ShowInformation("Community", "Machine successfully removed from Community.", w)
+							}
+						})
+					}()
+				}, w)
+			confirmDialog.Show()
+		}
 	})
 
-	// Load existing configuration
-	initial := community.LoadCommunityData()
-	populateFields(initial)
-	setEnabledSilent(initial.Enabled)
-	updateFieldStates()
+	// Prepopulate if saved preferences exist
+	if initial.Email != "" {
+		emailEntry.SetText(initial.Email)
+		updateGravatar(initial.Email)
+	} else if initial.AuthorID != "" {
+		authorIDLabel.SetText(fmt.Sprintf("Author ID: %s", initial.AuthorID))
+	}
+	updateUIState()
 
-	socialsForm := container.New(layout.NewFormLayout(), socialFormObjects...)
+	// Layout
+	headerTitle := widget.NewLabelWithStyle("Penguins Eggs Community", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	headerDesc := widget.NewLabel("Connect this machine to your artisan workshop in the global Penguins' Eggs Community.\nIdentity is derived from your email SHA-256 hash (Gravatar compatible).\nThe egg-pat authorization token is kept in memory only and never saved to disk.")
+	headerDesc.Wrapping = fyne.TextWrapWord
+	headerDesc.TextStyle = fyne.TextStyle{Italic: true}
 
-	infoBtn := widget.NewButtonWithIcon("Info", theme.InfoIcon(), func() {
-		dialog.ShowInformation(
-			"Penguins Community",
-			"Join the global Penguins Eggs Community!\n\n"+
-				"• When 'Join the Penguins Eggs Community' is OFF, your saved fields remain visible but disabled, and your public profile is removed from the server.\n"+
-				"• Switch 'Join the Penguins Eggs Community' to ON to enable editing and automatically save and publish your profile (or import an existing profile if only the Token field is filled).\n"+
-				"• Your private token is stored in ~/.ssh/penguins-community.secret (never in community.json/yaml).\n"+
-				"• No email address is requested or stored (anti-spam).",
-			w,
-		)
+	emailSection := container.NewVBox(
+		widget.NewLabelWithStyle("Author Email:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		emailEntry,
+		authorIDLabel,
+	)
+
+	identityRow := container.NewBorder(nil, nil, avatarBox, nil, container.NewPadded(emailSection))
+
+	tokenRow := container.NewBorder(nil, nil, nil, copyBtn, tokenEntry)
+	tokenSection := container.NewVBox(
+		widget.NewLabelWithStyle("Community Token (egg-pat):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		tokenRow,
+		tokenHelp,
+	)
+
+	actionSection := container.NewVBox(
+		statusLabel,
+		actionBtn,
+		feedbackLabel,
+	)
+
+	content := container.NewVBox(
+		headerTitle,
+		headerDesc,
+		widget.NewSeparator(),
+		identityRow,
+		widget.NewSeparator(),
+		tokenSection,
+		widget.NewSeparator(),
+		actionSection,
+	)
+
+	currentDataFunc := func() community.CommunityData {
+		em := strings.TrimSpace(strings.ToLower(emailEntry.Text))
+		authID := ""
+		if em != "" {
+			authID = community.ComputeAuthorID(em)
+		} else {
+			authID = initial.AuthorID
+		}
+		return community.CommunityData{
+			AuthorID:     authID,
+			Email:        em,
+			Enabled:      isEnabled,
+			ArtisanToken: strings.TrimSpace(tokenEntry.Text),
+		}
+	}
+
+	return container.NewVScroll(container.NewPadded(content)), currentDataFunc
+}
+
+func showGeneratedTokenDialog(parent fyne.Window, token string) {
+	if parent == nil {
+		return
+	}
+
+	copyToClipboard := func(text string) {
+		if fyne.CurrentApp() != nil && fyne.CurrentApp().Clipboard() != nil {
+			fyne.CurrentApp().Clipboard().SetContent(text)
+		} else if parent.Clipboard() != nil {
+			parent.Clipboard().SetContent(text)
+		}
+	}
+
+	copyToClipboard(token)
+
+	headerLabel := widget.NewLabelWithStyle("🎉 Machine successfully connected!", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	infoLabel := widget.NewLabel("Your new Community Token (egg-pat) has been generated:")
+	infoLabel.Wrapping = fyne.TextWrapWord
+
+	tokenEntry := widget.NewEntry()
+	tokenEntry.TextStyle = fyne.TextStyle{Monospace: true}
+	tokenEntry.SetText(token)
+	tokenEntry.OnChanged = func(s string) {
+		if s != token {
+			tokenEntry.SetText(token)
+		}
+	}
+
+	statusLabel := widget.NewLabel("✅ Token automatically copied to clipboard.")
+	statusLabel.TextStyle = fyne.TextStyle{Italic: true}
+
+	copyTokenBtn := widget.NewButtonWithIcon("Copy Token", theme.ContentCopyIcon(), func() {
+		copyToClipboard(token)
+		statusLabel.SetText("✅ Token copied to clipboard!")
 	})
 
-	headerRow := container.NewHBox(toggleBtn, layout.NewSpacer(), infoBtn)
-
-	topBar := container.NewVBox(
-		headerRow,
-		validationError,
-		widget.NewSeparator(),
+	fullMessageText := fmt.Sprintf(
+		"Penguins Eggs Community Token (egg-pat):\n%s\n\n⚠️ IMPORTANT: This token is held in memory only and never saved to disk.\nKeep it safe: you will need it to connect other machines or deactivate the profile.",
+		token,
 	)
 
-	formContent := container.NewVBox(
-		widget.NewLabelWithStyle("Community Token (~/.ssh/penguins-community.secret):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		tokenEntry,
+	copyAllBtn := widget.NewButtonWithIcon("Copy All", theme.FileTextIcon(), func() {
+		copyToClipboard(fullMessageText)
+		statusLabel.SetText("✅ Full message copied to clipboard!")
+	})
+
+	tokenRow := container.NewBorder(nil, nil, nil, container.NewHBox(copyTokenBtn, copyAllBtn), tokenEntry)
+
+	warningLabel := widget.NewLabel("⚠️ IMPORTANT: This token is held in memory only and never saved to disk.\nKeep it safe: you will need it to connect other machines or deactivate the profile.")
+	warningLabel.Wrapping = fyne.TextWrapWord
+	warningLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+	content := container.NewVBox(
+		headerLabel,
 		widget.NewSeparator(),
-
-		widget.NewLabelWithStyle("Nickname / Public handle:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		nicknameEntry,
-
-		widget.NewLabelWithStyle("Location / City (e.g. Roma, IT):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		locationEntry,
-
-		widget.NewLabelWithStyle("Repository / Website URL (source_url):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		sourceURLEntry,
-
-		widget.NewLabelWithStyle("Bio / Description (max 200 characters):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		bioEntry,
-		bioCounterLabel,
+		infoLabel,
+		tokenRow,
+		statusLabel,
 		widget.NewSeparator(),
-
-		widget.NewLabelWithStyle("Social Networks / Contact (optional):", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		socialHelp,
-		socialsForm,
+		warningLabel,
 	)
 
-	return container.NewBorder(topBar, nil, nil, nil, container.NewScroll(formContent)), currentData
+	d := dialog.NewCustom("Generated Token (egg-pat)", "I saved the token", content, parent)
+	d.SetIcon(theme.InfoIcon())
+	d.Resize(fyne.NewSize(620, 300))
+	d.Show()
 }

@@ -11,82 +11,22 @@
 package chef
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
-	"os/user"
 	"path/filepath"
-	"strconv"
 	"strings"
+
+	"github.com/pieroproietti/penguins-gui/internal/system"
 )
 
 // GetChefRoot returns ~/.chef for the calling user.
 // If running under sudo, it resolves the home directory of the invoking user.
 func GetChefRoot() (string, error) {
-	var homeDir string
-
-	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
-		if u, err := user.Lookup(sudoUser); err == nil {
-			homeDir = u.HomeDir
-		}
-	}
-
+	homeDir := system.GetUserHomeDir()
 	if homeDir == "" {
-		if out, err := exec.Command("logname").Output(); err == nil {
-			login := strings.TrimSpace(string(out))
-			if login != "" && login != "root" {
-				if u, err := user.Lookup(login); err == nil {
-					homeDir = u.HomeDir
-				}
-			}
-		}
+		return "", fmt.Errorf("unable to determine home directory")
 	}
-
-	if homeDir == "" {
-		if u := firstHumanUser(); u != nil {
-			homeDir = u.HomeDir
-		}
-	}
-
-	if homeDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("unable to determine home directory: %w", err)
-		}
-		homeDir = home
-	}
-
 	return filepath.Join(homeDir, ".chef"), nil
-}
-
-// firstHumanUser scans /etc/passwd for the first non-system user (UID 1000..59999).
-func firstHumanUser() *user.User {
-	f, err := os.Open("/etc/passwd")
-	if err != nil {
-		return nil
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		fields := strings.Split(scanner.Text(), ":")
-		if len(fields) < 7 {
-			continue
-		}
-		uid, err := strconv.Atoi(fields[2])
-		if err != nil || uid < 1000 || uid >= 60000 {
-			continue
-		}
-		shell := fields[6]
-		if strings.HasSuffix(shell, "nologin") || strings.HasSuffix(shell, "/false") {
-			continue
-		}
-		if u, err := user.Lookup(fields[0]); err == nil {
-			return u
-		}
-	}
-	return nil
 }
 
 // IsChefDirMissingOrEmpty checks if dir does not exist or has no files/recipes.
@@ -123,24 +63,5 @@ func IsChefDirMissingOrEmpty(dir string) bool {
 }
 
 func fixChefOwnership(root string) {
-	if os.Geteuid() != 0 {
-		return
-	}
-	username := os.Getenv("SUDO_USER")
-	if username == "" {
-		if out, err := exec.Command("logname").Output(); err == nil {
-			login := strings.TrimSpace(string(out))
-			if login != "" && login != "root" {
-				username = login
-			}
-		}
-	}
-	if username == "" {
-		if u := firstHumanUser(); u != nil {
-			username = u.Username
-		}
-	}
-	if username != "" {
-		_ = exec.Command("chown", "-R", username+":"+username, root).Run()
-	}
+	_ = system.FixPathOwnership(root)
 }
