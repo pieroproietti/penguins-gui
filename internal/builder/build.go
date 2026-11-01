@@ -73,6 +73,7 @@ func staging(root, stage string) error {
 	for source, dest := range map[string]string{
 		"penguins-gui.desktop":  "usr/share/applications/penguins-gui.desktop",
 		"penguins-gui.svg":      "usr/share/icons/hicolor/scalable/apps/penguins-gui.svg",
+		"penguins-gui.png":      "usr/share/icons/hicolor/256x256/apps/penguins-gui.png",
 		"49-penguins-gui.rules": "usr/share/polkit-1/rules.d/49-penguins-gui.rules",
 	} {
 		data, err := assets.ReadFile("assets/" + source)

@@ -62,6 +62,7 @@ func BuildAppImage(root string) (string, error) {
 	for source, dest := range map[string]string{
 		"penguins-gui.desktop": "usr/share/applications/penguins-gui.desktop",
 		"penguins-gui.svg":     "usr/share/icons/hicolor/scalable/apps/penguins-gui.svg",
+		"penguins-gui.png":     "usr/share/icons/hicolor/256x256/apps/penguins-gui.png",
 	} {
 		data, err := assets.ReadFile("assets/" + source)
 		if err != nil {
@@ -71,11 +72,26 @@ func BuildAppImage(root string) (string, error) {
 			return "", err
 		}
 	}
+	// appimagetool requires a top-level PNG icon matching Icon= to create a valid .DirIcon.
+	pngIcon, err := assets.ReadFile("assets/penguins-gui.png")
+	if err != nil {
+		return "", err
+	}
+	if err := writeFile(stage, "penguins-gui.png", pngIcon, 0644); err != nil {
+		return "", err
+	}
 	base, revision := getGitVersion(root)
 	version := base + "-" + revision
 	name := "penguins-gui-" + version + "-x86_64.AppImage"
 	artifact := filepath.Join(work, name)
-	cmd := exec.Command(tool, "--appdir", stage, "--desktop-file", filepath.Join(stage, "usr/share/applications/penguins-gui.desktop"), "--icon-file", filepath.Join(stage, "usr/share/icons/hicolor/scalable/apps/penguins-gui.svg"), "--output", "appimage")
+	cmd := exec.Command(
+		tool,
+		"--appdir", stage,
+		"--desktop-file", filepath.Join(stage, "usr/share/applications/penguins-gui.desktop"),
+		"--icon-file", filepath.Join(stage, "usr/share/icons/hicolor/scalable/apps/penguins-gui.svg"),
+		"--icon-file", filepath.Join(stage, "usr/share/icons/hicolor/256x256/apps/penguins-gui.png"),
+		"--output", "appimage",
+	)
 	cmd.Dir = work
 	cmd.Env = append(os.Environ(), "APPIMAGE_EXTRACT_AND_RUN=1", "ARCH=x86_64", "LDAI_OUTPUT="+artifact, "LINUXDEPLOY_OUTPUT_VERSION="+version)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
