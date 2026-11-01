@@ -89,7 +89,13 @@ func TestOpenSUSERPM(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"/usr/bin/penguins-gui", "/usr/share/applications/penguins-gui.desktop", "/usr/share/icons/hicolor/scalable/apps/penguins-gui.svg", "/usr/share/polkit-1/rules.d/49-penguins-gui.rules"} {
+	for _, want := range []string{
+		"/usr/bin/penguins-gui",
+		"/usr/share/applications/penguins-gui.desktop",
+		"/usr/share/icons/hicolor/scalable/apps/penguins-gui.svg",
+		"/usr/share/icons/hicolor/256x256/apps/penguins-gui.png",
+		"/usr/share/polkit-1/rules.d/49-penguins-gui.rules",
+	} {
 		if !strings.Contains(files, want) {
 			t.Errorf("RPM missing %s", want)
 		}

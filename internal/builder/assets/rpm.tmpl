@@ -26,4 +26,10 @@ cp -a "$PENGUINS_GUI_STAGE/usr/." "%{buildroot}/usr/"
 /usr/bin/penguins-gui
 /usr/share/applications/penguins-gui.desktop
 /usr/share/icons/hicolor/scalable/apps/penguins-gui.svg
+/usr/share/icons/hicolor/256x256/apps/penguins-gui.png
 /usr/share/polkit-1/rules.d/49-penguins-gui.rules
+
+%changelog
+* Sun Nov 01 2026 Piero Proietti <piero.proietti@gmail.com> - {{.BaseVersion}}-{{.Rel}}
+- Package penguins-gui {{.BaseVersion}}-{{.Rel}}
+
