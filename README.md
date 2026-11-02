@@ -2,7 +2,7 @@
 
 Minimal, independent desktop GUI for Penguins' Eggs.
 
-![penguins-gui](./penguins-gui.png)
+![remaster](./remaster.png)
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
@@ -47,7 +47,6 @@ See the official Fyne documentation for the development packages required by
 your distribution: <https://docs.fyne.io/started/>.
 
 ## Repository and system setup
-
 Edit contains actions: **Install Penguins Tools**, **Update /etc/skel**, and **Boot ISO…** (and recipe selection via **Cook…**).
 
 **Boot without USB…** is enabled only when startup through GRUB is detected
@@ -85,7 +84,7 @@ the cause. Calamares can be installed as needed using Penguins Chef recipes
 (**Edit → Cook…**).
 
 ## Community participation
-
+![community](./community.png)
 The dedicated **Community** tab allows artisans to connect their local machine to
 the global Penguins' Eggs Community network (`api.penguins-eggs.net`):
 
