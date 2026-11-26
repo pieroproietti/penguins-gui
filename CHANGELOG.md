@@ -1,5 +1,15 @@
 # Changelog
 
+## Release Notes: penguins-gui v26.11.26-1 - 2026-11-26
+
+### 🛠️ UI & Menu Refinements
+* **Clearer Repository & Suite Setup Action (`internal/ui/menu.go`, `internal/ui/app.go`, `README.md`)**: Renamed **Install Penguins Tools** to **Install Repo, Eggs & Chef…** and updated the missing CLI prompts to clarify repository setup and suite installation.
+* **Updated Screenshots (`remaster.png`, `community.png`)**: Refreshed application screenshots in the repository.
+
+### 📦 Packaging & AppImage Fixes
+* **AppImage `.DirIcon` Validation (`internal/builder/`)**: Supplied a 256x256 PNG icon for AppImage `.DirIcon` validation.
+* **RPM Spec Packaging (`internal/builder/`)**: Packaged the PNG icon and added a `%changelog` section in the RPM spec template.
+
 ## Release Notes: penguins-gui v26.11.1 - 2026-11-01
 
 ### 🌍 Simplified Community Workflow & In-Memory Token Security
