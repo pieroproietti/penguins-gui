@@ -12,7 +12,7 @@ internals and does not modify Penguins' Eggs.
 
 ## Current scope
 
-- Start without Eggs installed; warn when `eggs` is missing from `PATH` and point to **Edit → Install Penguins Tools**. Show its version in About when available.
+- Start without Eggs installed; warn when `eggs` is missing from `PATH` and point to **Edit → Install Repo, Eggs & Chef…**. Show its version in About when available.
 - Select one of the three existing remaster modes:
   - standard live;
   - system clone (`--clone`);
@@ -47,7 +47,7 @@ See the official Fyne documentation for the development packages required by
 your distribution: <https://docs.fyne.io/started/>.
 
 ## Repository and system setup
-Edit contains actions: **Install Penguins Tools**, **Update /etc/skel**, and **Boot ISO…** (and recipe selection via **Cook…**).
+Edit contains actions: **Install Repo, Eggs & Chef…**, **Update /etc/skel**, and **Boot ISO…** (and recipe selection via **Cook…**).
 
 **Boot without USB…** is enabled only when startup through GRUB is detected
 from the kernel's boot information or EFI LoaderInfo. If those details are
@@ -62,16 +62,16 @@ incomplete or mismatched markers stop the operation without changing the file.
 ISO files are removed only when you choose **Kill**. Deleting an ISO does not
 automatically remove its boot entry.
 
-Use **Edit → Install Penguins Tools** to configure the official Penguins' Eggs
+Use **Edit → Install Repo, Eggs & Chef…** to configure the official Penguins' Eggs
 repository and signing keys directly, using the same repository locations as
 Eggs. This installs both Penguins' Eggs and Penguins Chef.
 
 The GUI packages do not require `penguins-eggs`: it is an optional dependency.
-On a fresh system, install the GUI package and use **Edit → Install Penguins Tools**.
+On a fresh system, install the GUI package and use **Edit → Install Repo, Eggs & Chef…**.
 After configuring the repository, the same operation automatically refreshes
 package metadata and installs Eggs and Chef; the GUI detects it again and enables ISO creation without a restart.
 If repository setup fails, installation does not start. If installation fails,
-fix the reported problem and repeat **Install Penguins Tools** to retry. On
+fix the reported problem and repeat **Install Repo, Eggs & Chef…** to retry. On
 Arch/Manjaro this performs a full system upgrade with `pacman -Syu` to avoid a
 partial upgrade. Repository setup uses `curl` and, on Debian, `gpg`; packaged
 builds include these dependencies. When running a standalone binary, those tools

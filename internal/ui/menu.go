@@ -42,7 +42,7 @@ func (ui *App) setupMenusAndShortcuts() {
 		ui.communityMenuItem,
 		ui.cookMenuItem,
 		fyne.NewMenuItemSeparator(),
-		fyne.NewMenuItem("Install Penguins Tools", func() { ui.repoAction("add") }),
+		fyne.NewMenuItem("Install Repo, Eggs & Chef…", func() { ui.repoAction("add") }),
 		fyne.NewMenuItem("Update /etc/skel", ui.skelAction),
 		ui.grubMenuItem,
 	)

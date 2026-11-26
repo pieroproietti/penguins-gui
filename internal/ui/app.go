@@ -27,7 +27,7 @@ const (
 	ApplicationID      = "net.penguins-eggs.gui"
 	DefaultNest        = "/home/eggs"
 	DefaultAuthor      = "Piero Proietti <piero.proietti@gmail.com>"
-	missingEggsMessage = "The eggs command was not found in PATH. Use Edit → Install Penguins Tools to configure the repository and install the suite (Eggs & Chef). ISO creation will become available after installation."
+	missingEggsMessage = "The eggs command was not found in PATH. Use Edit → Install Repo, Eggs & Chef… to configure the repository and install the suite (Eggs & Chef). ISO creation will become available after installation."
 	defaultExplanation = "Select or hover over an action to view its description."
 )
 
@@ -163,7 +163,7 @@ func Run(iconSVG []byte) {
 	if ui.detectErr != nil {
 		dialog.ShowConfirm(
 			"penguins-eggs CLI not found",
-			missingEggsMessage+"\n\nWould you like to install Penguins Tools now?",
+			missingEggsMessage+"\n\nWould you like to set up the repository and install Eggs & Chef now?",
 			func(confirmed bool) {
 				if confirmed {
 					ui.repoAction("add")
@@ -479,7 +479,7 @@ func (ui *App) cookAction() {
 	if err != nil {
 		dialog.ShowConfirm(
 			"penguins-chef CLI not found",
-			"The chef command was not found in PATH.\n\nWould you like to install Penguins Tools (Eggs & Chef) now?",
+			"The chef command was not found in PATH.\n\nWould you like to set up the repository and install Eggs & Chef now?",
 			func(confirmed bool) {
 				if confirmed {
 					ui.repoAction("add")
@@ -560,7 +560,7 @@ func (ui *App) grubAction() {
 }
 
 func (ui *App) repoAction(action string) {
-	title, prompt := "Install Penguins Tools", "Add the official repository and signing keys, then automatically install Penguins’ Eggs and Penguins Chef?\n\nOn Arch/Manjaro this also performs the system upgrade required when refreshing package databases."
+	title, prompt := "Install Repo, Eggs & Chef", "Add the official repository and signing keys, then automatically install Penguins’ Eggs and Penguins Chef?\n\nOn Arch/Manjaro this also performs the system upgrade required when refreshing package databases."
 	if action == "rm" {
 		title, prompt = "Remove native repository", "Remove the official Penguins’ Eggs repository? Shared RPM/Pacman signing keys will be retained."
 	}
